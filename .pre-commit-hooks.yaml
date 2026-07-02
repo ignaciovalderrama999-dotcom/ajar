@@ -1,0 +1,8 @@
+- id: ajar
+  name: ajar security scan
+  description: Scan for fail-open logic, insecure defaults, and web vulnerabilities.
+  entry: ajar scan
+  language: python
+  types: [text]
+  pass_filenames: false
+  args: ["--fail-on", "high", "."]

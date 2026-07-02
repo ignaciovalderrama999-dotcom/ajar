@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `.ajar.yml` project configuration (`min_severity`, `fail_on`, `exclude`,
+  `disable`) with auto-discovery; CLI flags override it.
+- Baseline mode: `--write-baseline` records accepted findings and `--baseline`
+  reports only new ones, so ajar adopts cleanly into existing codebases.
+- `--exclude GLOB` to skip paths (repeatable).
+- `ajar rules --format md` and a generated [RULES.md](RULES.md) rule catalog.
+- pre-commit hook (`.pre-commit-hooks.yaml`) and a Dockerfile.
+- Comparison table and FAQ in the README.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added

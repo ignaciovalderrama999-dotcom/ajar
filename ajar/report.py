@@ -12,7 +12,7 @@ import sys
 from collections import Counter
 from collections.abc import Sequence
 
-from .models import Finding, Severity
+from .models import Finding, Rule, Severity
 
 _COLORS = {
     Severity.CRITICAL: "\033[95m",  # magenta
@@ -107,6 +107,46 @@ def render_json(findings: Sequence[Finding], scanned_root: str) -> str:
         "findings": [f.as_dict() for f in findings],
     }
     return json.dumps(payload, indent=2)
+
+
+def render_markdown_rules(rules: Sequence[Rule]) -> str:
+    """Render the full rule catalog as Markdown (used to generate RULES.md)."""
+
+    by_category: dict[str, list[Rule]] = {}
+    for rule in rules:
+        by_category.setdefault(rule.category, []).append(rule)
+
+    lines: list[str] = []
+    lines.append("# ajar rule catalog")
+    lines.append("")
+    lines.append(
+        f"ajar ships **{len(rules)} rules** across **{len(by_category)} categories**. "
+        "Every rule explains the risk and the fix. Rules are plain YAML in "
+        "[`ajar/rules/`](ajar/rules/) — audit or extend them freely."
+    )
+    lines.append("")
+    lines.append("> Regenerate this file with: `ajar rules --format md > RULES.md`")
+    lines.append("")
+
+    for category in sorted(by_category):
+        cat_rules = sorted(by_category[category], key=lambda r: (-r.severity.rank, r.id))
+        lines.append(f"## {category}  ({len(cat_rules)})")
+        lines.append("")
+        for rule in cat_rules:
+            lines.append(f"### `{rule.id}` — {rule.name}")
+            lines.append("")
+            lines.append(f"**Severity:** {rule.severity.value}")
+            lines.append("")
+            lines.append(rule.message)
+            lines.append("")
+            if rule.why:
+                lines.append(f"- **Why it matters:** {rule.why}")
+            if rule.fix:
+                lines.append(f"- **How to fix:** {rule.fix}")
+            for ref in rule.references:
+                lines.append(f"- **Reference:** {ref}")
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_sarif(findings: Sequence[Finding], scanned_root: str) -> str:

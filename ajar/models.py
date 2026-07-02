@@ -59,6 +59,19 @@ class Finding:
     column: int
     evidence: str
 
+    def fingerprint(self) -> str:
+        """A stable id for baseline diffing.
+
+        Intentionally excludes the line number so that unrelated edits above a
+        finding do not make it look "new". Based on rule id, file path, and the
+        matched code.
+        """
+        import hashlib
+
+        norm_path = self.path.replace("\\", "/")
+        raw = f"{self.rule.id}|{norm_path}|{self.evidence}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
     def as_dict(self) -> dict:
         return {
             "rule_id": self.rule.id,
@@ -73,4 +86,5 @@ class Finding:
             "line": self.line,
             "column": self.column,
             "evidence": self.evidence,
+            "fingerprint": self.fingerprint(),
         }

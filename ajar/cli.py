@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from . import __version__
-from .models import Severity
-from .report import render_json, render_sarif, render_terminal
+from .config import Config, ConfigError, find_config, load_config
+from .models import Finding, Severity
+from .report import render_json, render_markdown_rules, render_sarif, render_terminal
 from .rules import RuleError, load_rules
 from .scanner import scan_path
 
 _SEVERITY_CHOICES = [s.value for s in Severity]
+_DEFAULT_BASELINE = ".ajar-baseline.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,16 +39,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="terminal",
         help="output format (default: terminal)",
     )
+    # Severity flags default to None so a .ajar.yml value can fill them in;
+    # an explicit flag always wins.
     scan.add_argument(
         "--fail-on",
         choices=_SEVERITY_CHOICES,
-        default="medium",
+        default=None,
         help="exit non-zero if a finding at or above this severity exists (default: medium)",
     )
     scan.add_argument(
         "--min-severity",
         choices=_SEVERITY_CHOICES,
-        default="info",
+        default=None,
         help="hide findings below this severity (default: info)",
     )
     scan.add_argument(
@@ -61,10 +66,66 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="use a custom rules directory instead of the bundled one",
     )
+    scan.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="path to a .ajar.yml config file (default: auto-discovered)",
+    )
+    scan.add_argument(
+        "--no-config",
+        action="store_true",
+        help="ignore any .ajar.yml config file",
+    )
+    scan.add_argument(
+        "--baseline",
+        type=Path,
+        nargs="?",
+        const=Path(_DEFAULT_BASELINE),
+        default=None,
+        metavar="FILE",
+        help=f"ignore findings recorded in this baseline file (default file: {_DEFAULT_BASELINE})",
+    )
+    scan.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="write current findings to the baseline file and exit 0",
+    )
 
-    sub.add_parser("rules", help="list the loaded detection rules")
+    rules = sub.add_parser("rules", help="list the loaded detection rules")
+    rules.add_argument(
+        "--format",
+        choices=["terminal", "md"],
+        default="terminal",
+        help="output format (default: terminal)",
+    )
 
     return parser
+
+
+def _resolve(cli_value, config_value, default):
+    if cli_value is not None:
+        return cli_value
+    if config_value is not None:
+        return config_value
+    return default
+
+
+def _load_baseline(path: Path) -> set[str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuleError(f"could not read baseline {path}: {exc}") from exc
+    return set(data.get("fingerprints", []))
+
+
+def _write_baseline(path: Path, findings: list[Finding]) -> None:
+    payload = {
+        "tool": "ajar",
+        "version": __version__,
+        "fingerprints": sorted({f.fingerprint() for f in findings}),
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -73,16 +134,50 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(f"ajar: path not found: {root}", file=sys.stderr)
         return 2
 
+    # Configuration: explicit --config, else auto-discover, unless --no-config.
+    config = Config()
+    if not args.no_config:
+        config_path = args.config or find_config(root)
+        if config_path is not None:
+            if not config_path.is_file():
+                print(f"ajar: config not found: {config_path}", file=sys.stderr)
+                return 2
+            try:
+                config = load_config(config_path)
+            except ConfigError as exc:
+                print(f"ajar: {exc}", file=sys.stderr)
+                return 2
+
+    min_severity = _resolve(args.min_severity, config.min_severity, "info")
+    fail_on = _resolve(args.fail_on, config.fail_on, "medium")
+    excludes = tuple(args.exclude) + config.exclude
+
     try:
         rules = load_rules(args.rules)
     except RuleError as exc:
         print(f"ajar: {exc}", file=sys.stderr)
         return 2
+    if config.disable:
+        rules = [r for r in rules if r.id not in config.disable]
 
-    findings = scan_path(root, rules, tuple(args.exclude))
+    findings = scan_path(root, rules, excludes)
 
-    min_sev = Severity(args.min_severity)
+    min_sev = Severity(min_severity)
     findings = [f for f in findings if f.rule.severity >= min_sev]
+
+    if args.write_baseline:
+        target = args.baseline or Path(_DEFAULT_BASELINE)
+        _write_baseline(target, findings)
+        print(f"ajar: wrote baseline with {len(findings)} findings to {target}")
+        return 0
+
+    if args.baseline is not None:
+        try:
+            known = _load_baseline(args.baseline)
+        except RuleError as exc:
+            print(f"ajar: {exc}", file=sys.stderr)
+            return 2
+        findings = [f for f in findings if f.fingerprint() not in known]
 
     if args.format == "json":
         print(render_json(findings, str(root)))
@@ -91,8 +186,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     else:
         print(render_terminal(findings, str(root)))
 
-    fail_on = Severity(args.fail_on)
-    if any(f.rule.severity >= fail_on for f in findings):
+    fail_sev = Severity(fail_on)
+    if any(f.rule.severity >= fail_sev for f in findings):
         return 1
     return 0
 
@@ -103,6 +198,10 @@ def _cmd_rules(args: argparse.Namespace) -> int:
     except RuleError as exc:
         print(f"ajar: {exc}", file=sys.stderr)
         return 2
+
+    if args.format == "md":
+        print(render_markdown_rules(rules))
+        return 0
 
     by_category: dict[str, list] = {}
     for rule in rules:

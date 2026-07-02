@@ -1,0 +1,19 @@
+# Copy this file to `.ajar.yml` in your project root to set defaults.
+# Command-line flags always override what you put here.
+
+# Hide findings below this severity: info | low | medium | high | critical
+min_severity: low
+
+# Exit non-zero (fail CI) at or above this severity.
+fail_on: high
+
+# Skip paths matching these globs (matches a full path, a trailing part, or any
+# single path component).
+exclude:
+  - tests
+  - "*.min.js"
+  - vendor
+
+# Turn off specific rules by id (see `ajar rules`).
+disable:
+  - DEFAULT_BIND_ALL_INTERFACES
