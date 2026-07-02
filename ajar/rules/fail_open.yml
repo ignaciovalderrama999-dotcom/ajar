@@ -1,0 +1,83 @@
+# fail-open rules — the flagship category.
+#
+# These detect code that SILENTLY RUNS INSECURE when a config is missing,
+# wrong, or an environment differs. This is ajar's distinctive niche: not the
+# secret you left in, but the door you left open by default.
+rules:
+  - id: FAILOPEN_AUTH_ENV_BYPASS
+    name: Auth disabled outside production
+    severity: critical
+    category: fail-open
+    message: Authentication is switched off based on an environment name.
+    pattern: '(?i)(auth\w*|require_auth|login_required|authentication)\s*=\s*(False|0|"false")'
+    why: >
+      If the environment variable that flips this is missing or misspelled in
+      production, the app boots wide open with no authentication. Attackers do
+      not need a bug — the default IS the vulnerability.
+    fix: >
+      Fail closed: default authentication to ON and require an explicit,
+      loudly-logged opt-out that is impossible to trigger by a missing env var.
+    references:
+      - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+      - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
+
+  - id: FAILOPEN_ENV_NOT_PRODUCTION
+    name: Security relaxed when ENV is not 'production'
+    severity: high
+    category: fail-open
+    message: A security control is gated on the environment NOT being production.
+    pattern: '(?i)(env|environment|stage|mode)\s*[!=]=\s*["'']?prod(uction)?["'']?'
+    why: >
+      Comparing against 'production' means any unset, typo'd, or unexpected env
+      value (staging, prod-eu, empty string) takes the insecure branch. The
+      secure path should be the default, not a string match you have to get right.
+    fix: >
+      Invert the check: assume production. Only relax controls when an explicit
+      allow-list value is present, and log loudly when you do.
+    references:
+      - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+
+  - id: FAILOPEN_EXCEPT_ALLOW
+    name: Access granted inside an exception handler
+    severity: high
+    category: fail-open
+    message: An error handler appears to grant access or return success on failure.
+    pattern: '(?i)except.*:\s*(return\s+True|return\s+1|allow|grant|pass\s*#.*auth)'
+    why: >
+      If the check that determines access throws (network blip, malformed
+      token, downstream outage), catching the error and returning True means a
+      failure becomes a free pass. Attackers can force failures on purpose.
+    fix: >
+      Fail closed: on any error in an authorization path, deny access and alert.
+    references:
+      - https://cwe.mitre.org/data/definitions/636.html
+
+  - id: FAILOPEN_TLS_VERIFY_DEFAULT
+    name: TLS verification defaults to off
+    severity: high
+    category: fail-open
+    message: Certificate verification defaults to disabled via config/env.
+    pattern: '(?i)(verify|ssl_verify|tls_verify|check_hostname)\s*=\s*(os\.\w+\([^)]*,\s*(False|"false"|0)\)|False)'
+    why: >
+      A default of verify=False means that if the env toggle is absent, traffic
+      flows without certificate validation — every request is open to a
+      man-in-the-middle. The insecure state is the one you get by doing nothing.
+    fix: >
+      Default certificate verification to ON. Never accept an env var whose
+      absence disables TLS validation.
+    references:
+      - https://cwe.mitre.org/data/definitions/295.html
+
+  - id: FAILOPEN_DEFAULT_ALLOW
+    name: Default policy is allow
+    severity: medium
+    category: fail-open
+    message: A policy/permission default resolves to allow/open rather than deny.
+    pattern: '(?i)(default|fallback)\w*\s*=\s*["'']?(allow|permit|open|public|true)["'']?'
+    why: >
+      When a rule does not match, the safe answer is 'deny'. A default of
+      'allow' means every gap in your policy coverage is an opening.
+    fix: >
+      Make deny the default. Grant access only on an explicit, positive match.
+    references:
+      - https://owasp.org/www-community/Access_Control

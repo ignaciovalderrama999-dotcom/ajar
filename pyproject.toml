@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ajar"
+version = "0.1.0"
+description = "Finds the door you left open by default: fail-open logic and insecure config defaults in your code."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ignacio Valderrama" }]
+keywords = [
+    "security",
+    "static-analysis",
+    "sast",
+    "fail-open",
+    "insecure-defaults",
+    "misconfiguration",
+    "secrets",
+    "devsecops",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.4"]
+
+[project.urls]
+Homepage = "https://github.com/your-username/ajar"
+Issues = "https://github.com/your-username/ajar/issues"
+Changelog = "https://github.com/your-username/ajar/blob/main/CHANGELOG.md"
+
+[project.scripts]
+ajar = "ajar.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["ajar*"]
+
+[tool.setuptools.package-data]
+ajar = ["rules/*.yml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+# examples/ contains deliberately insecure, non-idiomatic code for demos.
+extend-exclude = ["examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,258 @@
+# injection & web-app rules.
+#
+# These are HEURISTIC: static text matching cannot prove a query is exploitable,
+# so ajar points at risky patterns for a human to review. Every finding is
+# defensive — it explains the attack and the safe alternative. It never exploits.
+rules:
+  # ---------------------------------------------------------------- SQL injection
+  - id: SQLI_FSTRING
+    name: SQL query built with an f-string
+    severity: critical
+    category: injection
+    message: An f-string is passed to a SQL execute/query call.
+    pattern: '(?i)(execute|executemany|executescript|raw|cursor\.execute|\.query)\s*\(\s*f["'']'
+    why: >
+      An f-string splices variables straight into SQL text. If any of those
+      values comes from a user, they can rewrite the query — read other users''
+      data, dump the whole table, or drop it entirely (SQL injection).
+    fix: >
+      Use parameterized queries: pass placeholders (?, %s, or :name) and hand the
+      values as a separate argument so the database never treats them as SQL.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+      - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+
+  - id: SQLI_CONCAT
+    name: SQL query built with string concatenation or %
+    severity: critical
+    category: injection
+    message: A SQL execute/query call concatenates or %-formats a string.
+    pattern: '(?i)(execute|executemany|raw|cursor\.execute|\.query)\s*\(.*["''].*(\+|%[^)]*%|%s?\s*%)'
+    why: >
+      Gluing user input into a query string with + or % lets an attacker inject
+      SQL. This is the single most common serious web vulnerability.
+    fix: >
+      Never build SQL by string. Use parameterized/prepared statements provided
+      by your driver or ORM.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: SQLI_FORMAT_METHOD
+    name: SQL query built with .format()
+    severity: high
+    category: injection
+    message: A SQL keyword appears in a string that calls .format().
+    pattern: '(?i)(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\b.*["''].*\.format\s*\('
+    why: >
+      .format() interpolates values into the query text just like concatenation,
+      opening the door to SQL injection when any argument is user-controlled.
+    fix: >
+      Replace .format() with parameterized query placeholders.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: SQLI_JS_TEMPLATE
+    name: SQL query built with a template literal
+    severity: critical
+    category: injection
+    message: A JS/TS query uses a template literal with interpolation.
+    pattern: '(?i)(query|execute|raw)\s*\(\s*`[^`]*\$\{'
+    extensions: [".js", ".ts", ".jsx", ".tsx"]
+    why: >
+      A `${...}` inside a query template splices values into SQL. User input
+      here is a classic SQL injection vector in Node apps.
+    fix: >
+      Use parameterized queries ($1, ?, or named params) from your DB client,
+      not template-literal interpolation.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  # ---------------------------------------------------------------- command injection
+  - id: CMDI_SHELL_TRUE
+    name: Subprocess run with shell=True
+    severity: high
+    category: injection
+    message: A subprocess call uses shell=True.
+    pattern: '(?i)subprocess\.\w+\([^)]*shell\s*=\s*True'
+    why: >
+      shell=True runs the command through the system shell, so any user-supplied
+      part can inject extra commands with ; | && $(...). This is OS command
+      injection.
+    fix: >
+      Pass the command as a list of arguments and leave shell=False (the default).
+      Never build the command line by concatenating user input.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: CMDI_OS_SYSTEM
+    name: os.system with a built string
+    severity: high
+    category: injection
+    message: os.system is called with a concatenated/formatted string.
+    pattern: '(?i)os\.system\s*\(.*(\+|%|\.format\(|f["''])'
+    why: >
+      os.system hands the whole string to the shell. Any user input in it can
+      inject additional commands.
+    fix: >
+      Use subprocess with an argument list and shell=False. Avoid os.system for
+      anything involving external input.
+    references:
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: CMDI_EVAL_EXEC
+    name: Dynamic code execution (eval/exec)
+    severity: high
+    category: injection
+    message: eval() or exec() is used to run code at runtime.
+    pattern: '(?i)(^|[^.\w])(eval|exec)\s*\('
+    why: >
+      If any part of the evaluated string is user-controlled, eval/exec run
+      attacker code with your program''s privileges (remote code execution).
+    fix: >
+      Remove eval/exec. Use safe alternatives: ast.literal_eval for data, a
+      dispatch dict for behavior, or a real parser.
+    references:
+      - https://cwe.mitre.org/data/definitions/95.html
+
+  # ---------------------------------------------------------------- XSS
+  - id: XSS_INNERHTML
+    name: Unescaped assignment to innerHTML
+    severity: high
+    category: injection
+    message: Content is assigned to innerHTML/outerHTML.
+    pattern: '(?i)\.(inner|outer)HTML\s*='
+    extensions: [".js", ".ts", ".jsx", ".tsx", ".html"]
+    why: >
+      Writing user data into innerHTML executes any <script> or event handler it
+      contains — cross-site scripting (XSS), which can steal sessions and act as
+      the victim.
+    fix: >
+      Use textContent for text, or sanitize HTML with a vetted library (e.g.
+      DOMPurify) before inserting it.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+  - id: XSS_DANGEROUS_HTML
+    name: React dangerouslySetInnerHTML
+    severity: medium
+    category: injection
+    message: dangerouslySetInnerHTML injects raw HTML into the DOM.
+    pattern: 'dangerouslySetInnerHTML'
+    extensions: [".js", ".ts", ".jsx", ".tsx"]
+    why: >
+      This bypasses React''s built-in escaping. Unsanitized user content here
+      becomes stored or reflected XSS.
+    fix: >
+      Render as text where possible, or sanitize with DOMPurify before passing
+      the HTML in.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+  - id: XSS_TEMPLATE_AUTOESCAPE_OFF
+    name: Template autoescaping disabled
+    severity: high
+    category: injection
+    message: HTML autoescaping is turned off in a template engine.
+    pattern: '(?i)(autoescape\s*=\s*False|\|\s*safe\b|mark_safe\s*\(|\{%\s*autoescape\s+off)'
+    why: >
+      Autoescaping is what stops user data from being interpreted as HTML.
+      Turning it off (or marking content "safe") reintroduces XSS.
+    fix: >
+      Keep autoescaping on. Only mark content safe after sanitizing it, and never
+      mark user input safe.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+  # ---------------------------------------------------------------- deserialization
+  - id: DESERIAL_PICKLE
+    name: Untrusted deserialization with pickle
+    severity: high
+    category: injection
+    message: pickle.load/loads deserializes data.
+    pattern: '(?i)pickle\.loads?\s*\('
+    why: >
+      pickle executes arbitrary code while unpickling. Feeding it attacker data
+      is remote code execution.
+    fix: >
+      Never unpickle untrusted data. Use JSON for data interchange, or a safe
+      schema (e.g. pydantic) for validation.
+    references:
+      - https://cwe.mitre.org/data/definitions/502.html
+
+  - id: DESERIAL_YAML_LOAD
+    name: Unsafe yaml.load
+    severity: high
+    category: injection
+    message: yaml.load is called without the safe loader.
+    pattern: '(?i)yaml\.load\s*\((?!.*(SafeLoader|safe_load))'
+    why: >
+      Default yaml.load can construct arbitrary Python objects, which is code
+      execution on malicious input.
+    fix: >
+      Use yaml.safe_load(...) (or Loader=yaml.SafeLoader) for any untrusted YAML.
+    references:
+      - https://cwe.mitre.org/data/definitions/502.html
+
+  # ---------------------------------------------------------------- SSRF / path / redirect
+  - id: SSRF_USER_URL
+    name: Server-side request to a user-controlled URL
+    severity: high
+    category: injection
+    message: An outbound HTTP call takes a URL derived from the request.
+    pattern: '(?i)(requests\.(get|post|put|delete|head)|urlopen|urllib\.request\.urlopen|httpx\.\w+)\s*\(\s*(request\.|req\.|params|args\[|input\()'
+    why: >
+      If users control the target URL, they can make your server call internal
+      systems, cloud metadata endpoints, or private services (SSRF) that they
+      could not reach directly.
+    fix: >
+      Validate the URL against an allow-list of hosts/schemes, resolve and block
+      private/internal IP ranges, and disable redirects for these calls.
+    references:
+      - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_(SSRF)/
+
+  - id: PATH_TRAVERSAL_OPEN
+    name: File path built from request input
+    severity: high
+    category: injection
+    message: A file is opened using a path taken from user input.
+    pattern: '(?i)open\s*\(\s*.*(request\.|req\.|params|args\[|input\(|os\.path\.join\([^)]*(request|params|input))'
+    why: >
+      If users control the path, "../../etc/passwd" style input lets them read or
+      write files outside the intended directory (path traversal).
+    fix: >
+      Resolve the final path and confirm it stays inside an allowed base
+      directory; reject any input containing path separators or "..".
+    references:
+      - https://owasp.org/www-community/attacks/Path_Traversal
+
+  - id: OPEN_REDIRECT
+    name: Redirect to a user-controlled target
+    severity: medium
+    category: injection
+    message: A redirect uses a destination taken from the request.
+    pattern: '(?i)redirect\s*\(\s*(request\.|req\.|params|args\[|input\()'
+    why: >
+      An attacker can craft a link to your trusted site that bounces the victim
+      to a phishing page (open redirect), lending your domain''s credibility.
+    fix: >
+      Redirect only to a fixed allow-list of internal paths; never to a raw
+      user-supplied URL.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+
+  - id: SSTI_RENDER_STRING
+    name: Server-side template built from a string
+    severity: high
+    category: injection
+    message: render_template_string is used, risking template injection.
+    pattern: '(?i)render_template_string\s*\('
+    why: >
+      Passing user input into a template string lets attackers execute template
+      expressions (SSTI), which often escalates to full code execution.
+    fix: >
+      Render from static template files and pass user data only as escaped
+      variables — never build the template body from input.
+    references:
+      - https://owasp.org/www-community/attacks/Server_Side_Template_Injection

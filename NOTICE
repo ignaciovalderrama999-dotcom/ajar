@@ -1,0 +1,14 @@
+ajar
+Copyright 2026 Ignacio Valderrama
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+ajar is a defensive security analysis tool. It analyzes and protects; it does
+not attack. See DISCLAIMER.md and ACCEPTABLE_USE.md for terms of use.
+
+The name "ajar" and the author's name may not be used to endorse or promote
+modified or derivative versions without prior written permission (see Section 6
+of the Apache License and DISCLAIMER.md). Anyone who modifies this software must
+mark their changes as required by Section 4(b) of the License; such
+modifications are the responsibility of the party that made them, not of the
+original author.

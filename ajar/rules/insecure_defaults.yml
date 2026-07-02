@@ -1,0 +1,104 @@
+# insecure-defaults rules — settings that ship dangerous out of the box.
+rules:
+  - id: DEFAULT_DEBUG_ON
+    name: Debug mode enabled
+    severity: high
+    category: insecure-defaults
+    message: Debug mode is turned on, which can leak stack traces and internals.
+    pattern: '(?i)(debug|flask_debug|django_debug)\s*=\s*(True|1|"true"|on)'
+    why: >
+      Debug mode exposes stack traces, environment variables, and often an
+      interactive console to anyone who triggers an error in production.
+    fix: >
+      Default DEBUG to False and drive it from an explicit env var that is only
+      true in local development.
+    references:
+      - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+
+  - id: DEFAULT_TLS_VERIFY_FALSE
+    name: TLS certificate verification disabled
+    severity: high
+    category: insecure-defaults
+    message: A request is made with certificate verification explicitly disabled.
+    pattern: '(?i)verify\s*=\s*False'
+    why: >
+      verify=False disables certificate validation, silently accepting forged
+      or self-signed certificates and enabling man-in-the-middle interception.
+    fix: >
+      Remove verify=False. If you must trust an internal CA, pass its cert
+      bundle path instead of turning verification off.
+    references:
+      - https://cwe.mitre.org/data/definitions/295.html
+
+  - id: DEFAULT_BIND_ALL_INTERFACES
+    name: Service bound to all network interfaces
+    severity: medium
+    category: insecure-defaults
+    message: A service binds to 0.0.0.0, exposing it on every network interface.
+    pattern: '0\.0\.0\.0'
+    why: >
+      Binding to 0.0.0.0 exposes a service beyond localhost. Combined with a
+      weak or default auth config, it becomes reachable from the whole network.
+    fix: >
+      Bind to 127.0.0.1 for local-only services, or put the service behind an
+      authenticated gateway if it must be reachable.
+    references:
+      - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+
+  - id: DEFAULT_PERMISSIVE_CORS
+    name: CORS allows any origin
+    severity: medium
+    category: insecure-defaults
+    message: CORS is configured to allow all origins (*).
+    pattern: '(?i)(access-control-allow-origin|allow_origins|cors_origins)\s*[:=]\s*["'']?\*'
+    why: >
+      A wildcard CORS origin lets any website make authenticated requests to
+      your API from a victim's browser, enabling data theft across origins.
+    fix: >
+      Replace * with an explicit allow-list of trusted origins.
+    references:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+
+  - id: DEFAULT_WORLD_WRITABLE
+    name: World-writable file permissions
+    severity: medium
+    category: insecure-defaults
+    message: File permissions grant write access to everyone (chmod 777 / 666).
+    pattern: '(?i)(chmod\s+(0?777|0?666)|0o777|0o666)'
+    why: >
+      World-writable files let any local user or compromised process modify
+      code, config, or data — a common privilege-escalation stepping stone.
+    fix: >
+      Grant the least permission needed (typically 0o644 for files, 0o755 for
+      executables) and restrict ownership.
+    references:
+      - https://cwe.mitre.org/data/definitions/732.html
+
+  - id: DEFAULT_INSECURE_COOKIE
+    name: Session cookie without Secure/HttpOnly
+    severity: low
+    category: insecure-defaults
+    message: A cookie flag that protects sessions is explicitly disabled.
+    pattern: '(?i)(secure|httponly)\s*=\s*False'
+    why: >
+      Disabling Secure sends session cookies over plain HTTP; disabling
+      HttpOnly exposes them to cross-site-scripting theft.
+    fix: >
+      Set Secure=True and HttpOnly=True on session cookies; add SameSite too.
+    references:
+      - https://owasp.org/www-community/controls/SecureCookieAttribute
+
+  - id: DEFAULT_MD5_SHA1_HASH
+    name: Weak hash used for security
+    severity: medium
+    category: insecure-defaults
+    message: A broken hash function (MD5/SHA1) is used where security matters.
+    pattern: '(?i)(hashlib\.(md5|sha1)|MessageDigest\.getInstance\("(MD5|SHA-1)"\))'
+    why: >
+      MD5 and SHA1 are collision-broken. For passwords they are also far too
+      fast, making brute force cheap.
+    fix: >
+      Use SHA-256+ for integrity, and a slow salted KDF (bcrypt, scrypt,
+      argon2) for passwords.
+    references:
+      - https://cwe.mitre.org/data/definitions/327.html

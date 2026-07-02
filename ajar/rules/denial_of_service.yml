@@ -1,0 +1,83 @@
+# denial-of-service rules.
+#
+# ajar is defensive: it CANNOT and WILL NOT launch or simulate a DoS/DDoS
+# attack. Instead it flags code that leaves your own app VULNERABLE to
+# resource-exhaustion / denial-of-service, so you can harden it.
+rules:
+  - id: DOS_NO_REQUEST_TIMEOUT
+    name: Outbound HTTP call without a timeout
+    severity: medium
+    category: denial-of-service
+    message: An HTTP request is made without a timeout.
+    pattern: '(?i)requests\.(get|post|put|delete|head|patch|request)\((?![^)]*timeout)'
+    why: >
+      With no timeout, a slow or unresponsive server can make this call hang
+      forever, tying up a worker/thread. Enough hung requests exhaust your pool
+      and take the whole service down (a slowloris-style denial of service).
+    fix: >
+      Always pass an explicit timeout, e.g. requests.get(url, timeout=5).
+    references:
+      - https://owasp.org/www-community/attacks/Denial_of_Service
+      - https://cwe.mitre.org/data/definitions/400.html
+
+  - id: DOS_REDOS_NESTED_QUANTIFIER
+    name: Regex vulnerable to catastrophic backtracking (ReDoS)
+    severity: medium
+    category: denial-of-service
+    message: A regex uses nested quantifiers that can backtrack catastrophically.
+    pattern: '\([^()]*[*+][^()]*\)\s*[*+]'
+    why: >
+      Patterns like (a+)+ or (.*)* can take exponential time on a crafted input.
+      A single malicious string can pin a CPU core at 100% and hang the request
+      (regular-expression denial of service, ReDoS).
+    fix: >
+      Rewrite the regex to avoid nested quantifiers, anchor it, or use a linear
+      engine (e.g. Google RE2) for untrusted input.
+    references:
+      - https://owasp.org/www-community/attacks/Regular_expression_Denial_of_Service_-_ReDoS
+      - https://cwe.mitre.org/data/definitions/1333.html
+
+  - id: DOS_REGEX_FROM_USER_INPUT
+    name: Regex compiled from user input
+    severity: high
+    category: denial-of-service
+    message: A regex pattern is built from request/user input.
+    pattern: '(?i)re\.(compile|match|search|fullmatch|findall|finditer|sub)\s*\(\s*(request\.|req\.|params|args\[|input\()'
+    why: >
+      If users control the regex itself, they can supply a catastrophic pattern
+      that hangs your server (ReDoS) — a cheap way to deny service to everyone.
+    fix: >
+      Never compile untrusted input as a regex. Validate against a fixed set of
+      allowed patterns, or use plain string operations instead.
+    references:
+      - https://cwe.mitre.org/data/definitions/1333.html
+
+  - id: DOS_DECOMPRESSION_BOMB
+    name: Archive extracted without size limits
+    severity: medium
+    category: denial-of-service
+    message: An archive is fully extracted without checking its size.
+    pattern: '(?i)\.extractall\s*\('
+    why: >
+      A tiny "zip bomb" can expand to gigabytes and fill the disk or exhaust
+      memory, crashing the host (decompression-bomb denial of service).
+    fix: >
+      Inspect each member's declared size and the running total before
+      extracting; cap the number of files and total bytes, and reject anything
+      over the limit.
+    references:
+      - https://cwe.mitre.org/data/definitions/409.html
+
+  - id: DOS_NO_URLLIB_TIMEOUT
+    name: urlopen without a timeout
+    severity: medium
+    category: denial-of-service
+    message: urllib urlopen is called without a timeout.
+    pattern: '(?i)urlopen\((?![^)]*timeout)'
+    why: >
+      Like any network call, urlopen without a timeout can block indefinitely
+      and exhaust your worker pool under load.
+    fix: >
+      Pass a timeout, e.g. urlopen(url, timeout=5).
+    references:
+      - https://cwe.mitre.org/data/definitions/400.html
