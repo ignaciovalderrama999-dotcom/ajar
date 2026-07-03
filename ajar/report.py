@@ -195,7 +195,7 @@ def render_sarif(findings: Sequence[Finding], scanned_root: str) -> str:
                 "tool": {
                     "driver": {
                         "name": "ajar",
-                        "informationUri": "https://github.com/your-username/ajar",
+                        "informationUri": "https://github.com/ignaciovalderrama999-dotcom/ajar",
                         "rules": list(rules_seen.values()),
                     }
                 },

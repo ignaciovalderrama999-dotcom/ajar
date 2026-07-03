@@ -15,7 +15,7 @@ ajar is a **defensive** tool. Every contribution must keep it that way:
 ## Getting set up
 
 ```bash
-git clone https://github.com/your-username/ajar
+git clone https://github.com/ignaciovalderrama999-dotcom/ajar
 cd ajar
 pip install -e ".[dev]"
 pytest            # run the test suite

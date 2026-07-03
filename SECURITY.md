@@ -10,7 +10,7 @@ and does not connect to any network service. It collects no telemetry.
 If you find a security issue **in ajar's own code** (for example, a way a
 crafted input file could crash or misbehave), please report it privately:
 
-- Open a [GitHub Security Advisory](https://github.com/your-username/ajar/security/advisories/new), or
+- Open a [GitHub Security Advisory](https://github.com/ignaciovalderrama999-dotcom/ajar/security/advisories/new), or
 - Email the maintainer (add your contact here).
 
 Please do **not** open a public issue for a security vulnerability until it has

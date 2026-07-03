@@ -50,9 +50,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-username/ajar"
-Issues = "https://github.com/your-username/ajar/issues"
-Changelog = "https://github.com/your-username/ajar/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/ignaciovalderrama999-dotcom/ajar"
+Issues = "https://github.com/ignaciovalderrama999-dotcom/ajar/issues"
+Changelog = "https://github.com/ignaciovalderrama999-dotcom/ajar/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ajar = "ajar.cli:main"

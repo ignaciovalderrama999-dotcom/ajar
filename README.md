@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img alt="CI" src="https://github.com/your-username/ajar/actions/workflows/ci.yml/badge.svg">
+  <img alt="CI" src="https://github.com/ignaciovalderrama999-dotcom/ajar/actions/workflows/ci.yml/badge.svg">
   <img alt="license" src="https://img.shields.io/badge/license-Apache_2.0-green">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-blue">
   <img alt="rules" src="https://img.shields.io/badge/rules-44-informational">
@@ -123,7 +123,7 @@ ajar isn't trying to replace the big scanners — it fills a gap next to them.
 pip install "ajar[full]"   # recommended: includes the tree-sitter engine
 pip install ajar           # lightweight: pattern scanning only
 # or, from source:
-git clone https://github.com/your-username/ajar && cd ajar && pip install ".[full]"
+git clone https://github.com/ignaciovalderrama999-dotcom/ajar && cd ajar && pip install ".[full]"
 ```
 
 ## Usage
@@ -205,7 +205,7 @@ ajar ships a [pre-commit](https://pre-commit.com) hook — add it to
 
 ```yaml
 repos:
-  - repo: https://github.com/your-username/ajar
+  - repo: https://github.com/ignaciovalderrama999-dotcom/ajar
     rev: v0.1.0
     hooks:
       - id: ajar
@@ -216,7 +216,7 @@ repos:
 No local install needed:
 
 ```bash
-docker run --rm -v "$PWD:/src" ghcr.io/your-username/ajar scan /src
+docker run --rm -v "$PWD:/src" ghcr.io/ignaciovalderrama999-dotcom/ajar scan /src
 ```
 
 ## Suppressing a finding
