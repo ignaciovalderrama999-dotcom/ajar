@@ -70,6 +70,32 @@ understand the real structure of your code. That means:
 No parsers installed? ajar falls back to fast pattern scanning and still works —
 so it's "pro by default" without ever being fragile.
 
+## 🤖 Use it with Claude (or any AI assistant)
+
+ajar is built to **pair with an AI coding assistant** so you don't just *find*
+vulnerabilities — you *fix* them. A scanner tells you what's wrong; your AI
+applies the fix; ajar confirms it's closed. Together they close the loop.
+
+ajar ships as a **Claude Code skill** (in [`skills/ajar/`](skills/ajar/SKILL.md)).
+Install it and just say:
+
+> **"Use the ajar skill on my project."**
+
+Claude will then:
+
+1. **Scan** your code with ajar (`ajar scan . --format json`).
+2. **Explain** every finding — what it is, how it's attacked, how to fix it.
+3. **Fix** each issue with you, worst-first, making minimal correct changes.
+4. **Re-scan** until the project is clean.
+
+Every finding already carries a machine-readable `why` and `fix` (see
+`--format json`), so any assistant can act on the results — no special mode
+needed. It stays defensive throughout: it fixes and protects, never attacks.
+
+> A clean scan is a strong result, not a guarantee — ajar catches common,
+> detectable issues, not business-logic or design flaws. Keep a human in the loop
+> for anything security-critical.
+
 ## Why ajar is different
 
 - 🎯 **Fail-open first.** The flagship category is *fail-open logic*, not just secrets — the misconfigurations behind real breaches (open buckets, auth-less admin panels, debug in prod).
