@@ -71,18 +71,18 @@ understand the real structure of your code. That means:
 No parsers installed? ajar falls back to fast pattern scanning and still works —
 so it's "pro by default" without ever being fragile.
 
-## 🤖 Use it with Claude (or any AI assistant)
+## 🤖 Use it with your AI assistant (or any AI assistant)
 
 ajar is built to **pair with an AI coding assistant** so you don't just *find*
 vulnerabilities — you *fix* them. A scanner tells you what's wrong; your AI
 applies the fix; ajar confirms it's closed. Together they close the loop.
 
-ajar ships as a **Claude Code skill** (in [`skills/ajar/`](skills/ajar/SKILL.md)).
+ajar ships as a **AI-assistant skill** (in [`skills/ajar/`](skills/ajar/SKILL.md)).
 Install it and just say:
 
 > **"Use the ajar skill on my project."**
 
-Claude will then:
+Your AI assistant will then:
 
 1. **Scan** your code with ajar (`ajar scan . --format json`).
 2. **Explain** every finding — what it is, how it's attacked, how to fix it.
