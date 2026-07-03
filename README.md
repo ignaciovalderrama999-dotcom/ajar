@@ -1,8 +1,9 @@
-<h1 align="center">ajar 🚪</h1>
+<p align="center">
+  <img src="assets/banner.png" alt="ajar — find the door you left open by default" width="840">
+</p>
 
 <p align="center">
-  <b>Find the door you left open by default.</b><br>
-  A defensive scanner for <i>fail-open logic</i>, <i>insecure defaults</i>, and <i>web vulnerabilities</i> — that understands your code and explains every fix.
+  <b>A defensive scanner for <i>fail-open logic</i>, <i>insecure defaults</i>, and <i>web vulnerabilities</i> — that understands your code and explains every fix.</b>
 </p>
 
 <p align="center">
