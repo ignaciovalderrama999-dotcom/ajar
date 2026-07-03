@@ -1,6 +1,6 @@
 # ajar rule catalog
 
-ajar ships **44 rules** across **5 categories**. Every rule explains the risk and the fix. Rules are plain YAML in [`ajar/rules/`](ajar/rules/) — audit or extend them freely.
+ajar ships **56 rules** across **5 categories**. Every rule explains the risk and the fix. Rules are plain YAML in [`ajar/rules/`](ajar/rules/) — audit or extend them freely.
 
 > Regenerate this file with: `ajar rules --format md > RULES.md`
 
@@ -111,7 +111,7 @@ A policy/permission default resolves to allow/open rather than deny.
 - **How to fix:** Make deny the default. Grant access only on an explicit, positive match.
 - **Reference:** https://owasp.org/www-community/Access_Control
 
-## injection  (21)
+## injection  (23)
 
 ### `SQLI_CONCAT` — SQL query built with string concatenation or %
 
@@ -286,6 +286,16 @@ HTML autoescaping is turned off in a template engine.
 - **How to fix:** Keep autoescaping on. Only mark content safe after sanitizing it, and never mark user input safe.
 - **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
+### `XXE_EXTERNAL_ENTITIES` — XML parser resolves external entities (XXE)
+
+**Severity:** high
+
+An XML parser is configured to resolve external entities.
+
+- **Why it matters:** With external entities enabled, a crafted XML document can read local files, reach internal services (SSRF), or exhaust memory (billion laughs) — XML External Entity injection (XXE).
+- **How to fix:** Disable external entities and DTD processing. In Python use defusedxml; in Java set the secure-processing features to disallow DOCTYPE/entities.
+- **Reference:** https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
 ### `OPEN_REDIRECT` — Redirect to a user-controlled target
 
 **Severity:** medium
@@ -326,7 +336,27 @@ A "javascript:" URL is assigned, which executes code.
 - **How to fix:** Never use javascript: URLs. Attach event handlers in code instead.
 - **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
 
-## insecure-defaults  (7)
+### `XXE_UNSAFE_PARSER` — XML parsed with a non-hardened parser
+
+**Severity:** medium
+
+XML is parsed with a standard library that is XXE-prone by default.
+
+- **Why it matters:** Several standard XML parsers process DTDs/entities by default, exposing the app to XXE when the XML comes from an untrusted source.
+- **How to fix:** Parse untrusted XML with defusedxml (Python) or an equivalent hardened configuration that disables DTDs and external entities.
+- **Reference:** https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
+## insecure-defaults  (13)
+
+### `JWT_NONE_ALGORITHM` — JWT accepts the 'none' algorithm
+
+**Severity:** critical
+
+A JWT is configured to allow the "none" signing algorithm.
+
+- **Why it matters:** With alg "none" a token needs no signature, so an attacker can forge any token (become any user, an admin) just by crafting the payload.
+- **How to fix:** Pin an explicit strong algorithm (e.g. RS256 or HS256) and reject "none". Never derive the verification algorithm from the token header.
+- **Reference:** https://cwe.mitre.org/data/definitions/347.html
 
 ### `DEFAULT_DEBUG_ON` — Debug mode enabled
 
@@ -347,6 +377,46 @@ A request is made with certificate verification explicitly disabled.
 - **Why it matters:** verify=False disables certificate validation, silently accepting forged or self-signed certificates and enabling man-in-the-middle interception.
 - **How to fix:** Remove verify=False. If you must trust an internal CA, pass its cert bundle path instead of turning verification off.
 - **Reference:** https://cwe.mitre.org/data/definitions/295.html
+
+### `JWT_VERIFY_DISABLED` — JWT signature verification disabled
+
+**Severity:** high
+
+A JWT is decoded without verifying its signature.
+
+- **Why it matters:** Skipping signature verification means any tampered or forged token is accepted, defeating the entire point of a signed token.
+- **How to fix:** Always verify the signature and the claims (exp, aud, iss). Never decode with verification turned off outside a controlled test.
+- **Reference:** https://cwe.mitre.org/data/definitions/347.html
+
+### `WEAK_CIPHER` — Weak or broken cipher / mode
+
+**Severity:** high
+
+A broken cipher (DES/RC4) or insecure mode (ECB) is used.
+
+- **Why it matters:** DES and RC4 are broken, and ECB mode leaks patterns in the plaintext. Data "encrypted" this way can often be recovered.
+- **How to fix:** Use AES-256 in an authenticated mode (GCM) or a high-level library (libsodium / cryptography's Fernet). Never use ECB for real data.
+- **Reference:** https://cwe.mitre.org/data/definitions/327.html
+
+### `CSP_UNSAFE` — Content-Security-Policy allows unsafe-inline/unsafe-eval
+
+**Severity:** medium
+
+A CSP directive permits unsafe-inline or unsafe-eval.
+
+- **Why it matters:** unsafe-inline and unsafe-eval let injected inline scripts run, which largely defeats the XSS protection a CSP is supposed to provide.
+- **How to fix:** Remove unsafe-inline/unsafe-eval; use nonces or hashes for the scripts you trust, and move inline handlers into separate files.
+- **Reference:** https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
+
+### `CSRF_PROTECTION_DISABLED` — CSRF protection disabled
+
+**Severity:** medium
+
+Cross-site request forgery protection is turned off.
+
+- **Why it matters:** Without CSRF protection, a malicious site can make a logged-in victim's browser perform state-changing actions on your app without their consent.
+- **How to fix:** Keep CSRF protection enabled for state-changing routes; use per-request tokens or the SameSite cookie attribute. Only exempt endpoints that are safe by design (e.g. stateless APIs with token auth) and document why.
+- **Reference:** https://owasp.org/www-community/attacks/csrf
 
 ### `DEFAULT_BIND_ALL_INTERFACES` — Service bound to all network interfaces
 
@@ -388,6 +458,16 @@ File permissions grant write access to everyone (chmod 777 / 666).
 - **How to fix:** Grant the least permission needed (typically 0o644 for files, 0o755 for executables) and restrict ownership.
 - **Reference:** https://cwe.mitre.org/data/definitions/732.html
 
+### `INSECURE_RANDOM_FOR_SECRET` — Weak randomness used for a security value
+
+**Severity:** medium
+
+A non-cryptographic RNG is used for a token/password/secret.
+
+- **Why it matters:** random / Math.random are predictable. Using them for tokens, OTPs, session ids or passwords lets an attacker guess or reproduce the value.
+- **How to fix:** Use a cryptographically secure source: Python secrets module, os.urandom, or crypto.randomBytes / crypto.getRandomValues in JS.
+- **Reference:** https://cwe.mitre.org/data/definitions/338.html
+
 ### `DEFAULT_INSECURE_COOKIE` — Session cookie without Secure/HttpOnly
 
 **Severity:** low
@@ -398,7 +478,7 @@ A cookie flag that protects sessions is explicitly disabled.
 - **How to fix:** Set Secure=True and HttpOnly=True on session cookies; add SameSite too.
 - **Reference:** https://owasp.org/www-community/controls/SecureCookieAttribute
 
-## secrets  (6)
+## secrets  (10)
 
 ### `SECRET_AWS_ACCESS_KEY` — Hardcoded AWS access key
 
@@ -410,6 +490,16 @@ An AWS access key ID appears to be hardcoded.
 - **How to fix:** Revoke the key immediately, rotate it, and load credentials from the environment or a secrets manager instead.
 - **Reference:** https://cwe.mitre.org/data/definitions/798.html
 
+### `SECRET_GITHUB_TOKEN` — Hardcoded GitHub token
+
+**Severity:** critical
+
+A GitHub personal access / OAuth token appears to be hardcoded.
+
+- **Why it matters:** A leaked GitHub token grants API access to repositories and org resources. Bots scrape public code for this exact pattern within minutes.
+- **How to fix:** Revoke and regenerate the token immediately; load it from the environment or a secrets manager.
+- **Reference:** https://cwe.mitre.org/data/definitions/798.html
+
 ### `SECRET_PRIVATE_KEY` — Private key material
 
 **Severity:** critical
@@ -418,6 +508,16 @@ A PEM private key block is embedded in source.
 
 - **Why it matters:** A leaked private key lets an attacker impersonate your service, decrypt traffic, or sign malicious artifacts.
 - **How to fix:** Remove the key, rotate it, and store it in a secrets manager or an untracked file referenced by path.
+- **Reference:** https://cwe.mitre.org/data/definitions/798.html
+
+### `SECRET_STRIPE_KEY` — Hardcoded Stripe live key
+
+**Severity:** critical
+
+A live Stripe secret key appears to be hardcoded.
+
+- **Why it matters:** A live Stripe secret key can move real money and read customer/payment data. This is one of the highest-impact secrets to leak.
+- **How to fix:** Roll the key in the Stripe dashboard now and load it only server-side from a secret store.
 - **Reference:** https://cwe.mitre.org/data/definitions/798.html
 
 ### `NEXT_PUBLIC_SECRET` — Secret exposed to the browser via NEXT_PUBLIC_
@@ -438,6 +538,26 @@ A password/secret/token is assigned a hardcoded literal value.
 
 - **Why it matters:** Hardcoded credentials end up in version history forever, are shared with everyone who clones the repo, and cannot be rotated without a code change.
 - **How to fix:** Load secrets from environment variables or a secrets manager. Never commit real credentials — use placeholders in examples.
+- **Reference:** https://cwe.mitre.org/data/definitions/798.html
+
+### `SECRET_GOOGLE_API_KEY` — Hardcoded Google API key
+
+**Severity:** high
+
+A Google API key appears to be hardcoded.
+
+- **Why it matters:** A committed Google API key can be abused to run up billing or access enabled services on your project.
+- **How to fix:** Restrict, rotate, and move the key out of source into environment config.
+- **Reference:** https://cwe.mitre.org/data/definitions/798.html
+
+### `SECRET_LLM_API_KEY` — Hardcoded AI/LLM API key
+
+**Severity:** high
+
+An OpenAI/Anthropic-style API key appears to be hardcoded.
+
+- **Why it matters:** A leaked LLM API key lets anyone spend against your account and access your usage. These keys are actively scraped from public repos.
+- **How to fix:** Revoke and rotate the key; read it from the environment, never commit it.
 - **Reference:** https://cwe.mitre.org/data/definitions/798.html
 
 ### `SECRET_SLACK_TOKEN` — Hardcoded Slack token

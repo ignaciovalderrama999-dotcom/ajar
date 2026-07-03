@@ -1,0 +1,133 @@
+# Cryptography & authentication rules.
+rules:
+  # ------------------------------------------------------------------- JWT
+  - id: JWT_NONE_ALGORITHM
+    name: JWT accepts the 'none' algorithm
+    severity: critical
+    category: insecure-defaults
+    message: A JWT is configured to allow the "none" signing algorithm.
+    pattern: '(?i)(algorithm|algorithms)["'']?\s*[:=]\s*\[?\s*["'']none["'']'
+    context: string   # the algorithm name lives inside a string/config value
+    why: >
+      With alg "none" a token needs no signature, so an attacker can forge any
+      token (become any user, an admin) just by crafting the payload.
+    fix: >
+      Pin an explicit strong algorithm (e.g. RS256 or HS256) and reject "none".
+      Never derive the verification algorithm from the token header.
+    references:
+      - https://cwe.mitre.org/data/definitions/347.html
+
+  - id: JWT_VERIFY_DISABLED
+    name: JWT signature verification disabled
+    severity: high
+    category: insecure-defaults
+    message: A JWT is decoded without verifying its signature.
+    pattern: '(?i)verify_signature\s*[:=]\s*(False|false)'
+    why: >
+      Skipping signature verification means any tampered or forged token is
+      accepted, defeating the entire point of a signed token.
+    fix: >
+      Always verify the signature and the claims (exp, aud, iss). Never decode
+      with verification turned off outside a controlled test.
+    references:
+      - https://cwe.mitre.org/data/definitions/347.html
+
+  # ------------------------------------------------------------------- CSRF
+  - id: CSRF_PROTECTION_DISABLED
+    name: CSRF protection disabled
+    severity: medium
+    category: insecure-defaults
+    message: Cross-site request forgery protection is turned off.
+    pattern: '(?i)(csrf_exempt|WTF_CSRF_ENABLED\s*=\s*False|csrf\s*[:=]\s*(False|false)|csrfPrevention\s*:\s*false)'
+    context: string
+    why: >
+      Without CSRF protection, a malicious site can make a logged-in victim's
+      browser perform state-changing actions on your app without their consent.
+    fix: >
+      Keep CSRF protection enabled for state-changing routes; use per-request
+      tokens or the SameSite cookie attribute. Only exempt endpoints that are
+      safe by design (e.g. stateless APIs with token auth) and document why.
+    references:
+      - https://owasp.org/www-community/attacks/csrf
+
+  # -------------------------------------------------------------------- CSP
+  - id: CSP_UNSAFE
+    name: Content-Security-Policy allows unsafe-inline/unsafe-eval
+    severity: medium
+    category: insecure-defaults
+    message: A CSP directive permits unsafe-inline or unsafe-eval.
+    pattern: '(?i)(content-security-policy|script-src|scriptSrc|defaultSrc)[^\n]*(unsafe-inline|unsafe-eval)'
+    context: string
+    why: >
+      unsafe-inline and unsafe-eval let injected inline scripts run, which
+      largely defeats the XSS protection a CSP is supposed to provide.
+    fix: >
+      Remove unsafe-inline/unsafe-eval; use nonces or hashes for the scripts you
+      trust, and move inline handlers into separate files.
+    references:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy
+
+  # ---------------------------------------------------------------- XML/XXE
+  - id: XXE_EXTERNAL_ENTITIES
+    name: XML parser resolves external entities (XXE)
+    severity: high
+    category: injection
+    message: An XML parser is configured to resolve external entities.
+    pattern: '(?i)(resolve_entities\s*=\s*True|noent\s*[:=]\s*(True|true)|external_general_entities\s*=\s*True|XMLResolver|setFeature\([^)]*external-general-entities[^)]*true)'
+    context: string
+    why: >
+      With external entities enabled, a crafted XML document can read local
+      files, reach internal services (SSRF), or exhaust memory (billion laughs)
+      — XML External Entity injection (XXE).
+    fix: >
+      Disable external entities and DTD processing. In Python use defusedxml; in
+      Java set the secure-processing features to disallow DOCTYPE/entities.
+    references:
+      - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
+  - id: XXE_UNSAFE_PARSER
+    name: XML parsed with a non-hardened parser
+    severity: medium
+    category: injection
+    message: XML is parsed with a standard library that is XXE-prone by default.
+    pattern: '(?i)(xml\.etree\.|\betree\.(parse|fromstring)|xml\.dom\.minidom\.parse|xml\.sax\.)'
+    why: >
+      Several standard XML parsers process DTDs/entities by default, exposing the
+      app to XXE when the XML comes from an untrusted source.
+    fix: >
+      Parse untrusted XML with defusedxml (Python) or an equivalent hardened
+      configuration that disables DTDs and external entities.
+    references:
+      - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
+  # -------------------------------------------------------------- weak crypto
+  - id: WEAK_CIPHER
+    name: Weak or broken cipher / mode
+    severity: high
+    category: insecure-defaults
+    message: A broken cipher (DES/RC4) or insecure mode (ECB) is used.
+    pattern: '(?i)(\bDES\.new|\bRC4\b|\bARC4\b|MODE_ECB|AES/ECB|Cipher\.getInstance\(\s*["''](DES|RC4|DESede))'
+    context: string
+    why: >
+      DES and RC4 are broken, and ECB mode leaks patterns in the plaintext.
+      Data "encrypted" this way can often be recovered.
+    fix: >
+      Use AES-256 in an authenticated mode (GCM) or a high-level library
+      (libsodium / cryptography's Fernet). Never use ECB for real data.
+    references:
+      - https://cwe.mitre.org/data/definitions/327.html
+
+  - id: INSECURE_RANDOM_FOR_SECRET
+    name: Weak randomness used for a security value
+    severity: medium
+    category: insecure-defaults
+    message: A non-cryptographic RNG is used for a token/password/secret.
+    pattern: '(?i)(token|password|secret|otp|nonce|session[_-]?id|api[_-]?key|salt|reset)\w*\s*[:=][^\n]*(random\.(random|randint|randrange|choice|choices|sample)|Math\.random)'
+    why: >
+      random / Math.random are predictable. Using them for tokens, OTPs, session
+      ids or passwords lets an attacker guess or reproduce the value.
+    fix: >
+      Use a cryptographically secure source: Python secrets module, os.urandom,
+      or crypto.randomBytes / crypto.getRandomValues in JS.
+    references:
+      - https://cwe.mitre.org/data/definitions/338.html
