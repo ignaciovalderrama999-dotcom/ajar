@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Structural analysis engine (tree-sitter)** for Python, JavaScript,
+  TypeScript, and TSX, available via `pip install ajar[full]`. Matches inside
+  comments and string literals are ignored (killing the biggest class of false
+  positive), while secrets are still detected inside strings. Falls back to
+  pattern scanning when the parsers are not installed.
+- Per-rule `context` field (`code` | `string` | `any`) controlling where a match
+  is allowed to sit.
+- 6 JavaScript/TypeScript/Next.js rules: `document.write` XSS, `javascript:`
+  URLs, `new Function`, `fetch`/`axios` SSRF, `NEXT_PUBLIC_` secret exposure,
+  and open redirects. **44 rules total.**
 - `.ajar.yml` project configuration (`min_severity`, `fail_on`, `exclude`,
   `disable`) with auto-discovery; CLI flags override it.
 - Baseline mode: `--write-baseline` records accepted findings and `--baseline`

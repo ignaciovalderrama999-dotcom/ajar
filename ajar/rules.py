@@ -37,6 +37,13 @@ def _parse_rule(raw: dict, source: Path) -> Rule:
     except re.error as exc:
         raise RuleError(f"{source.name}: rule {raw['id']!r} has an invalid regex: {exc}") from exc
 
+    context = str(raw.get("context", "")).lower()
+    if context and context not in ("code", "string", "any"):
+        raise RuleError(
+            f"{source.name}: rule {raw['id']!r} has invalid context {context!r} "
+            "(use code | string | any)"
+        )
+
     return Rule(
         id=str(raw["id"]),
         name=str(raw["name"]),
@@ -48,6 +55,7 @@ def _parse_rule(raw: dict, source: Path) -> Rule:
         fix=str(raw.get("fix", "")).strip(),
         references=tuple(raw.get("references", []) or ()),
         extensions=tuple(raw.get("extensions", []) or ()),
+        context=context,
     )
 
 
@@ -59,7 +67,10 @@ def load_rules(rules_dir: Path | None = None) -> list[Rule]:
     seen_ids: set[str] = set()
 
     for path in sorted(directory.glob("*.yml")):
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            raise RuleError(f"{path.name}: invalid YAML: {exc}") from exc
         for raw in data.get("rules", []) or []:
             rule = _parse_rule(raw, path)
             if rule.id in seen_ids:

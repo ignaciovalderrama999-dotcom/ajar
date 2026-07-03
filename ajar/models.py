@@ -47,6 +47,19 @@ class Rule:
     # File selection: glob-style suffixes this rule applies to (e.g. ".py").
     # Empty means "any text file".
     extensions: tuple[str, ...] = field(default_factory=tuple)
+    # Where a match is allowed to sit, once the structural engine knows what is
+    # code vs comment vs string:
+    #   "code"   -> ignore matches inside comments and string literals (default)
+    #   "string" -> allow matches inside strings (e.g. a regex, a URL), not comments
+    #   "any"    -> never suppress (secrets: a leaked key counts anywhere)
+    # Empty means "use the default for this rule's category".
+    context: str = ""
+
+    @property
+    def effective_context(self) -> str:
+        if self.context:
+            return self.context
+        return "any" if self.category == "secrets" else "code"
 
 
 @dataclass(frozen=True)

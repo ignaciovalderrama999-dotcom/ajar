@@ -2,14 +2,15 @@
 
 <p align="center">
   <b>Find the door you left open by default.</b><br>
-  A defensive scanner for <i>fail-open logic</i>, <i>insecure defaults</i>, and <i>web vulnerabilities</i> — that explains every fix.
+  A defensive scanner for <i>fail-open logic</i>, <i>insecure defaults</i>, and <i>web vulnerabilities</i> — that understands your code and explains every fix.
 </p>
 
 <p align="center">
   <img alt="CI" src="https://github.com/your-username/ajar/actions/workflows/ci.yml/badge.svg">
   <img alt="license" src="https://img.shields.io/badge/license-Apache_2.0-green">
   <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-blue">
-  <img alt="rules" src="https://img.shields.io/badge/rules-38-informational">
+  <img alt="rules" src="https://img.shields.io/badge/rules-44-informational">
+  <img alt="languages" src="https://img.shields.io/badge/lang-Py%20·%20JS%20·%20TS%20·%20TSX-blue">
   <img alt="local only" src="https://img.shields.io/badge/telemetry-none-brightgreen">
   <img alt="stance" src="https://img.shields.io/badge/stance-analyze%20%26%20protect-blueviolet">
 </p>
@@ -52,15 +53,30 @@ Point ajar at a web app or SaaS backend and it flags five families of risk:
 | 🌊 **denial-of-service** | missing timeouts, catastrophic-backtracking regex (ReDoS), decompression bombs, user-controlled regex |
 | 🔑 **secrets** | hardcoded AWS keys, private keys, tokens, credentials in URLs |
 
-Works on **Python and JS/TS** today. Every rule is defensive — it explains the
-attack and the safe fix, and never produces an exploit.
+Works on **Python, JavaScript, TypeScript, and TSX (React/Next.js)**. Every rule
+is defensive — it explains the attack and the safe fix, and never produces an exploit.
+
+### It actually understands your code
+
+With the optional parser engine (`pip install ajar[full]`), ajar uses
+[tree-sitter](https://tree-sitter.github.io/) — the same parser GitHub uses — to
+understand the real structure of your code. That means:
+
+- A keyword mentioned in a **comment or a string never triggers a false alarm** —
+  in Python *and* in your TypeScript/Next.js files.
+- Secrets are still caught **inside** strings (that's where they hide), while
+  code checks are only applied to real code.
+
+No parsers installed? ajar falls back to fast pattern scanning and still works —
+so it's "pro by default" without ever being fragile.
 
 ## Why ajar is different
 
 - 🎯 **Fail-open first.** The flagship category is *fail-open logic*, not just secrets — the misconfigurations behind real breaches (open buckets, auth-less admin panels, debug in prod).
 - 🎓 **It teaches.** Every finding explains **how an attacker exploits it** and **exactly how to fix it**, with references. You learn while you scan.
+- 🧠 **Understands code, not just text.** An optional tree-sitter engine parses Python/JS/TS/TSX so comments and strings never cause false positives — the difference between a serious tool and a noisy one.
 - 🔒 **Trust by design.** 100% local. **Zero telemetry.** Your code never leaves your machine. Rules are plain, readable YAML you can audit in `ajar/rules/`.
-- ⚡ **Tiny footprint.** One dependency, pip-installable, runs anywhere Python does. Terminal, JSON, and SARIF output for CI.
+- ⚡ **Light and robust.** Tiny core (one dependency); the parser engine is an optional extra, and ajar degrades gracefully to pattern scanning without it. Terminal, JSON, and SARIF output for CI.
 
 ### How it compares
 
@@ -69,6 +85,7 @@ ajar isn't trying to replace the big scanners — it fills a gap next to them.
 | | ajar | secret scanners | big SAST platforms |
 |---|:---:|:---:|:---:|
 | Fail-open / insecure-default logic | ✅ focus | ⚠️ partial | ⚠️ partial |
+| Comment/string-aware (few false positives) | ✅ tree-sitter | ⚠️ | ✅ |
 | Explains attack **and** fix per finding | ✅ | ❌ | ⚠️ |
 | Runs 100% locally, zero telemetry | ✅ | ⚠️ | ❌ (often cloud) |
 | Transparent rules you can read/edit | ✅ YAML | ⚠️ | ⚠️ |
@@ -77,9 +94,10 @@ ajar isn't trying to replace the big scanners — it fills a gap next to them.
 ## Install
 
 ```bash
-pip install ajar        # once published to PyPI
+pip install "ajar[full]"   # recommended: includes the tree-sitter engine
+pip install ajar           # lightweight: pattern scanning only
 # or, from source:
-git clone https://github.com/your-username/ajar && cd ajar && pip install .
+git clone https://github.com/your-username/ajar && cd ajar && pip install ".[full]"
 ```
 
 ## Usage
@@ -201,7 +219,14 @@ rules:
     fix: How to close the door.
     references:
       - https://owasp.org/...
+    extensions: [".py"]    # optional: only these file types
+    context: code          # optional: code (default) | string | any
 ```
+
+`context` controls where a match counts once the tree-sitter engine knows code
+from comments and strings: `code` ignores comments **and** strings (most rules),
+`string` allows matches inside string literals (e.g. a dangerous regex),
+`any` never suppresses (secrets — a leaked key counts anywhere).
 
 ## Ethics: analyze and protect, never attack 🛡️
 
@@ -254,8 +279,9 @@ exploits. It is defensive by design — see [ACCEPTABLE_USE.md](ACCEPTABLE_USE.m
 - [x] `--baseline` to accept existing findings and only flag new ones
 - [x] pre-commit hook and Docker image
 - [x] Denial-of-service rule category
-- [ ] AST-based checks for Python to cut false positives further (injection rules are heuristic today)
-- [ ] More languages (Go, Java, PHP, Ruby)
+- [x] Structural (tree-sitter) engine so comments/strings never false-positive
+- [ ] Deeper structural rules (track a value across lines, e.g. template-literal SQLi through a variable)
+- [ ] More languages (Go, Java, PHP, Ruby — tree-sitter already supports 100+)
 - [ ] Publish to PyPI
 
 ## Contributing

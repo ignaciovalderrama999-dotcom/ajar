@@ -1,0 +1,101 @@
+# JavaScript / TypeScript / React / Next.js rules.
+#
+# These target the browser and Node/Next.js server world. With the tree-sitter
+# engine enabled, matches inside comments and strings are ignored automatically.
+rules:
+  - id: XSS_DOCUMENT_WRITE
+    name: document.write with dynamic content
+    severity: high
+    category: injection
+    message: document.write() renders content directly into the page.
+    pattern: '(?i)document\.write(ln)?\s*\('
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".html"]
+    why: >
+      document.write of anything user-influenced (URL, hash, input) executes
+      injected scripts — reflected cross-site scripting (XSS).
+    fix: >
+      Build the DOM with textContent / safe framework rendering, or sanitize
+      with a vetted library (DOMPurify) before inserting HTML.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+  - id: XSS_JS_HREF_JAVASCRIPT
+    name: "javascript: URL sink"
+    severity: medium
+    category: injection
+    message: A "javascript:" URL is assigned, which executes code.
+    pattern: '(?i)(href|src)\s*=\s*["'']?javascript:'
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".html"]
+    why: >
+      A javascript: URL runs arbitrary script in the page context; if any part
+      comes from user input it becomes XSS.
+    fix: >
+      Never use javascript: URLs. Attach event handlers in code instead.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
+
+  - id: CODE_EXEC_NEW_FUNCTION
+    name: Dynamic code execution via new Function
+    severity: high
+    category: injection
+    message: new Function() compiles a string into runnable code.
+    pattern: '(?i)new\s+Function\s*\('
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]
+    why: >
+      Like eval, new Function turns a string into executing code; user input
+      here is remote code execution.
+    fix: >
+      Remove it. Use a lookup table or a real parser instead of compiling code
+      at runtime.
+    references:
+      - https://cwe.mitre.org/data/definitions/95.html
+
+  - id: SSRF_FETCH_USER_URL
+    name: fetch/axios to a user-controlled URL
+    severity: high
+    category: injection
+    message: An outbound request uses a URL derived from the request/input.
+    pattern: '(?i)(fetch|axios(\.\w+)?)\s*\(\s*[^)]*(req\.|request\.|searchParams|params\.|query\.|body\.|input)'
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]
+    why: >
+      If users control the target URL, they can make your server (in a Next.js
+      API route or server action) reach internal services or cloud metadata
+      endpoints — server-side request forgery (SSRF).
+    fix: >
+      Validate the URL against an allow-list of hosts and schemes, and block
+      private/internal IP ranges before fetching.
+    references:
+      - https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_(SSRF)/
+
+  - id: NEXT_PUBLIC_SECRET
+    name: Secret exposed to the browser via NEXT_PUBLIC_
+    severity: high
+    category: secrets
+    message: A NEXT_PUBLIC_ variable names a secret and is shipped to the client.
+    pattern: 'NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PASSWORD|PRIVATE|TOKEN|CREDENTIAL)'
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".env"]
+    why: >
+      In Next.js, any env var prefixed NEXT_PUBLIC_ is inlined into the
+      JavaScript bundle sent to every visitor. Putting a secret there leaks it
+      to the whole world.
+    fix: >
+      Drop the NEXT_PUBLIC_ prefix so the value stays server-side, and read it
+      only in server code (API routes, server components, server actions).
+    references:
+      - https://nextjs.org/docs/app/building-your-application/configuring/environment-variables
+
+  - id: OPEN_REDIRECT_JS
+    name: Redirect to a user-controlled target (JS/Next.js)
+    severity: medium
+    category: injection
+    message: A redirect destination comes from the request/input.
+    pattern: '(?i)(NextResponse\.redirect|res\.redirect|redirect|location\.(href|assign|replace))\s*\(?\s*[^)]*(req\.|request\.|searchParams|params\.|query\.|input)'
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]
+    why: >
+      An attacker can craft a link on your trusted domain that bounces the
+      victim to a phishing site (open redirect).
+    fix: >
+      Redirect only to a fixed allow-list of internal paths, never to a raw
+      user-supplied URL.
+    references:
+      - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html

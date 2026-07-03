@@ -1,6 +1,6 @@
 # ajar rule catalog
 
-ajar ships **38 rules** across **5 categories**. Every rule explains the risk and the fix. Rules are plain YAML in [`ajar/rules/`](ajar/rules/) — audit or extend them freely.
+ajar ships **44 rules** across **5 categories**. Every rule explains the risk and the fix. Rules are plain YAML in [`ajar/rules/`](ajar/rules/) — audit or extend them freely.
 
 > Regenerate this file with: `ajar rules --format md > RULES.md`
 
@@ -111,7 +111,7 @@ A policy/permission default resolves to allow/open rather than deny.
 - **How to fix:** Make deny the default. Grant access only on an explicit, positive match.
 - **Reference:** https://owasp.org/www-community/Access_Control
 
-## injection  (16)
+## injection  (21)
 
 ### `SQLI_CONCAT` — SQL query built with string concatenation or %
 
@@ -175,6 +175,16 @@ A subprocess call uses shell=True.
 - **Reference:** https://owasp.org/Top10/A03_2021-Injection/
 - **Reference:** https://cwe.mitre.org/data/definitions/78.html
 
+### `CODE_EXEC_NEW_FUNCTION` — Dynamic code execution via new Function
+
+**Severity:** high
+
+new Function() compiles a string into runnable code.
+
+- **Why it matters:** Like eval, new Function turns a string into executing code; user input here is remote code execution.
+- **How to fix:** Remove it. Use a lookup table or a real parser instead of compiling code at runtime.
+- **Reference:** https://cwe.mitre.org/data/definitions/95.html
+
 ### `DESERIAL_PICKLE` — Untrusted deserialization with pickle
 
 **Severity:** high
@@ -215,6 +225,16 @@ A SQL keyword appears in a string that calls .format().
 - **How to fix:** Replace .format() with parameterized query placeholders.
 - **Reference:** https://owasp.org/Top10/A03_2021-Injection/
 
+### `SSRF_FETCH_USER_URL` — fetch/axios to a user-controlled URL
+
+**Severity:** high
+
+An outbound request uses a URL derived from the request/input.
+
+- **Why it matters:** If users control the target URL, they can make your server (in a Next.js API route or server action) reach internal services or cloud metadata endpoints — server-side request forgery (SSRF).
+- **How to fix:** Validate the URL against an allow-list of hosts and schemes, and block private/internal IP ranges before fetching.
+- **Reference:** https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_(SSRF)/
+
 ### `SSRF_USER_URL` — Server-side request to a user-controlled URL
 
 **Severity:** high
@@ -234,6 +254,16 @@ render_template_string is used, risking template injection.
 - **Why it matters:** Passing user input into a template string lets attackers execute template expressions (SSTI), which often escalates to full code execution.
 - **How to fix:** Render from static template files and pass user data only as escaped variables — never build the template body from input.
 - **Reference:** https://owasp.org/www-community/attacks/Server_Side_Template_Injection
+
+### `XSS_DOCUMENT_WRITE` — document.write with dynamic content
+
+**Severity:** high
+
+document.write() renders content directly into the page.
+
+- **Why it matters:** document.write of anything user-influenced (URL, hash, input) executes injected scripts — reflected cross-site scripting (XSS).
+- **How to fix:** Build the DOM with textContent / safe framework rendering, or sanitize with a vetted library (DOMPurify) before inserting HTML.
+- **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ### `XSS_INNERHTML` — Unescaped assignment to innerHTML
 
@@ -266,6 +296,16 @@ A redirect uses a destination taken from the request.
 - **How to fix:** Redirect only to a fixed allow-list of internal paths; never to a raw user-supplied URL.
 - **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
 
+### `OPEN_REDIRECT_JS` — Redirect to a user-controlled target (JS/Next.js)
+
+**Severity:** medium
+
+A redirect destination comes from the request/input.
+
+- **Why it matters:** An attacker can craft a link on your trusted domain that bounces the victim to a phishing site (open redirect).
+- **How to fix:** Redirect only to a fixed allow-list of internal paths, never to a raw user-supplied URL.
+- **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+
 ### `XSS_DANGEROUS_HTML` — React dangerouslySetInnerHTML
 
 **Severity:** medium
@@ -275,6 +315,16 @@ dangerouslySetInnerHTML injects raw HTML into the DOM.
 - **Why it matters:** This bypasses React''s built-in escaping. Unsanitized user content here becomes stored or reflected XSS.
 - **How to fix:** Render as text where possible, or sanitize with DOMPurify before passing the HTML in.
 - **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+
+### `XSS_JS_HREF_JAVASCRIPT` — javascript: URL sink
+
+**Severity:** medium
+
+A "javascript:" URL is assigned, which executes code.
+
+- **Why it matters:** A javascript: URL runs arbitrary script in the page context; if any part comes from user input it becomes XSS.
+- **How to fix:** Never use javascript: URLs. Attach event handlers in code instead.
+- **Reference:** https://cheatsheetseries.owasp.org/cheatsheets/DOM_based_XSS_Prevention_Cheat_Sheet.html
 
 ## insecure-defaults  (7)
 
@@ -348,7 +398,7 @@ A cookie flag that protects sessions is explicitly disabled.
 - **How to fix:** Set Secure=True and HttpOnly=True on session cookies; add SameSite too.
 - **Reference:** https://owasp.org/www-community/controls/SecureCookieAttribute
 
-## secrets  (5)
+## secrets  (6)
 
 ### `SECRET_AWS_ACCESS_KEY` — Hardcoded AWS access key
 
@@ -369,6 +419,16 @@ A PEM private key block is embedded in source.
 - **Why it matters:** A leaked private key lets an attacker impersonate your service, decrypt traffic, or sign malicious artifacts.
 - **How to fix:** Remove the key, rotate it, and store it in a secrets manager or an untracked file referenced by path.
 - **Reference:** https://cwe.mitre.org/data/definitions/798.html
+
+### `NEXT_PUBLIC_SECRET` — Secret exposed to the browser via NEXT_PUBLIC_
+
+**Severity:** high
+
+A NEXT_PUBLIC_ variable names a secret and is shipped to the client.
+
+- **Why it matters:** In Next.js, any env var prefixed NEXT_PUBLIC_ is inlined into the JavaScript bundle sent to every visitor. Putting a secret there leaks it to the whole world.
+- **How to fix:** Drop the NEXT_PUBLIC_ prefix so the value stays server-side, and read it only in server code (API routes, server components, server actions).
+- **Reference:** https://nextjs.org/docs/app/building-your-application/configuring/environment-variables
 
 ### `SECRET_GENERIC_ASSIGNMENT` — Hardcoded credential assignment
 

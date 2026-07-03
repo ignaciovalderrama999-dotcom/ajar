@@ -233,6 +233,7 @@ rules:
     category: injection
     message: A redirect uses a destination taken from the request.
     pattern: '(?i)redirect\s*\(\s*(request\.|req\.|params|args\[|input\()'
+    extensions: [".py"]
     why: >
       An attacker can craft a link to your trusted site that bounces the victim
       to a phishing page (open redirect), lending your domain''s credibility.

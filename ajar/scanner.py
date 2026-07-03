@@ -8,6 +8,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from .models import Finding, Rule
+from .parsing import analyze
 from .rules import compile_rules
 
 # Directories we never descend into — noise, not source.
@@ -117,6 +118,10 @@ def _scan_text(
     compiled: list[tuple[Rule, re.Pattern[str]]],
 ) -> Iterator[Finding]:
     display_path = str(file_path)
+    # Structural analysis (comment/string regions) when tree-sitter is available
+    # for this language; otherwise None -> plain pattern scanning.
+    regions = analyze(text, file_path.suffix)
+
     for lineno, line in enumerate(text.splitlines(), start=1):
         suppressed = _ignored_rule_ids(line)
         for rule, pattern in compiled:
@@ -125,11 +130,24 @@ def _scan_text(
             if suppressed is not None and (not suppressed or rule.id in suppressed):
                 continue
             match = pattern.search(line)
-            if match:
-                yield Finding(
-                    rule=rule,
-                    path=display_path,
-                    line=lineno,
-                    column=match.start() + 1,
-                    evidence=line.strip()[:200],
-                )
+            if not match:
+                continue
+            # Structural context: a "code" rule is ignored inside comments and
+            # strings; a "string" rule is ignored only in comments (it targets
+            # string content, e.g. a regex); an "any" rule is never suppressed.
+            if regions is not None:
+                ctx = rule.effective_context
+                if ctx != "any":
+                    byte_col = len(line[: match.start()].encode("utf-8"))
+                    row = lineno - 1
+                    if regions.in_comment(row, byte_col):
+                        continue
+                    if ctx == "code" and regions.in_string(row, byte_col):
+                        continue
+            yield Finding(
+                rule=rule,
+                path=display_path,
+                line=lineno,
+                column=match.start() + 1,
+                evidence=line.strip()[:200],
+            )

@@ -26,6 +26,7 @@ rules:
     category: denial-of-service
     message: A regex uses nested quantifiers that can backtrack catastrophically.
     pattern: '\([^()]*[*+][^()]*\)\s*[*+]'
+    context: string   # the dangerous regex lives inside a string literal
     why: >
       Patterns like (a+)+ or (.*)* can take exponential time on a crafted input.
       A single malicious string can pin a CPU core at 100% and hang the request
