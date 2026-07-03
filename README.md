@@ -8,7 +8,7 @@
 <p align="center">
   <img alt="CI" src="https://github.com/ignaciovalderrama999-dotcom/ajar/actions/workflows/ci.yml/badge.svg">
   <img alt="license" src="https://img.shields.io/badge/license-Apache_2.0-green">
-  <img alt="python" src="https://img.shields.io/badge/python-3.9%2B-blue">
+  <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue">
   <img alt="rules" src="https://img.shields.io/badge/rules-44-informational">
   <img alt="languages" src="https://img.shields.io/badge/lang-Py%20·%20JS%20·%20TS%20·%20TSX-blue">
   <img alt="local only" src="https://img.shields.io/badge/telemetry-none-brightgreen">
@@ -190,11 +190,11 @@ ajar scan . --baseline         # from now on, only NEW issues fail the build
 ## Use it in CI
 
 ajar returns a non-zero exit code when it finds an issue at or above
-`--fail-on` (default: `medium`), so it drops straight into any pipeline.
-A ready-made GitHub Action lives in [`.github/workflows/ajar.yml`](.github/workflows/ajar.yml).
+`--fail-on` (default: `medium`), so it drops straight into any pipeline. Add a
+step to your GitHub Actions workflow:
 
 ```yaml
-- run: pip install ajar
+- run: pip install "ajar[full]"
 - run: ajar scan . --fail-on high
 ```
 

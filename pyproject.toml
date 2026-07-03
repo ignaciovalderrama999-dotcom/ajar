@@ -7,7 +7,7 @@ name = "ajar"
 version = "0.1.0"
 description = "Finds the door you left open by default: fail-open logic and insecure config defaults in your code."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Ignacio Valderrama" }]
 keywords = [
@@ -65,7 +65,7 @@ ajar = ["rules/*.yml"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 # examples/ contains deliberately insecure, non-idiomatic code for demos.
 extend-exclude = ["examples"]
 
