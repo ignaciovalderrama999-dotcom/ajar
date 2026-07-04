@@ -25,7 +25,10 @@ rules:
     severity: medium
     category: denial-of-service
     message: A regex uses nested quantifiers that can backtrack catastrophically.
-    pattern: '\([^()]*[*+][^()]*\)\s*[*+]'
+    # Requires a quantifier immediately before AND after the group, e.g. (a+)+ or
+    # (.*)* — the true ReDoS signature. This does NOT match arithmetic such as
+    # (a * b) * c, where the paren is not touching a quantifier.
+    pattern: '[+*]\)[+*]'
     context: string   # the dangerous regex lives inside a string literal
     why: >
       Patterns like (a+)+ or (.*)* can take exponential time on a crafted input.

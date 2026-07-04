@@ -127,6 +127,16 @@ def test_detects_redos_and_decompression_bomb(tmp_path, rules):
     assert "DOS_DECOMPRESSION_BOMB" in ids
 
 
+def test_redos_does_not_flag_math(tmp_path, rules):
+    # Arithmetic like (a * b) * c must NOT be mistaken for a catastrophic regex.
+    f = tmp_path / "anim.js"
+    f.write_text(
+        "camera.position.x += (ptr.x * 0.3 - camera.position.x) * 0.04;\n"
+        "const v = (t * 0.04) % 1;\n"
+    )
+    assert not any(x.rule.id == "DOS_REDOS_NESTED_QUANTIFIER" for x in scan_path(f, rules))
+
+
 def test_skips_binary_and_vendor_dirs(tmp_path, rules):
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "x.js").write_text('const DEBUG = True')
