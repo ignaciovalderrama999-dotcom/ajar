@@ -25,3 +25,8 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Skip Sigstore/Rekor attestations: that third-party transparency-log
+          # service has transient outages (502s) that otherwise fail an
+          # already-successful build/upload for no fault of this project.
+          attestations: false
