@@ -140,6 +140,7 @@ ajar scan . --min-severity high   # only show high+ findings
 ajar scan . --exclude tests --exclude '*.min.js'  # skip paths (repeatable)
 ajar scan . --format json         # machine-readable output
 ajar scan . --format sarif        # GitHub code scanning
+ajar scan . --format report       # a graded Markdown audit report (A–F)
 ajar scan . --write-baseline      # record current findings as accepted
 ajar scan . --baseline            # then only show NEW findings
 ajar rules                        # list every rule ajar checks

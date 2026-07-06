@@ -157,6 +157,17 @@ def test_taint_flags_cross_line_flow(tmp_path, rules):
     assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
 
 
+def test_taint_respects_sanitizer(tmp_path, rules):
+    # Input validated with int() before the sink must NOT be flagged.
+    f = tmp_path / "app.py"
+    f.write_text(
+        "def h():\n"
+        "    uid = int(request.args.get('id'))\n"
+        "    cursor.execute(uid)\n"
+    )
+    assert not any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
+
+
 def test_taint_quiet_on_safe_flow(tmp_path, rules):
     f = tmp_path / "app.py"
     f.write_text(

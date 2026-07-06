@@ -10,7 +10,13 @@ from pathlib import Path
 from . import __version__
 from .config import Config, ConfigError, find_config, load_config
 from .models import Finding, Severity
-from .report import render_json, render_markdown_rules, render_sarif, render_terminal
+from .report import (
+    render_json,
+    render_markdown_rules,
+    render_report,
+    render_sarif,
+    render_terminal,
+)
 from .rules import RuleError, load_rules
 from .scanner import scan_path
 
@@ -35,9 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("path", nargs="?", default=".", help="path to scan (default: current dir)")
     scan.add_argument(
         "--format",
-        choices=["terminal", "json", "sarif"],
+        choices=["terminal", "json", "sarif", "report"],
         default="terminal",
-        help="output format (default: terminal)",
+        help="output format: terminal, json, sarif, or report (a graded Markdown audit)",
     )
     # Severity flags default to None so a .ajar.yml value can fill them in;
     # an explicit flag always wins.
@@ -183,6 +189,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         print(render_json(findings, str(root)))
     elif args.format == "sarif":
         print(render_sarif(findings, str(root)))
+    elif args.format == "report":
+        print(render_report(findings, str(root)))
     else:
         print(render_terminal(findings, str(root)))
 

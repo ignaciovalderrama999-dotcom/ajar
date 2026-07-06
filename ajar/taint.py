@@ -25,6 +25,14 @@ _SOURCE_RE = re.compile(
     r"|params\[|url\.searchParams|formData\.get)"
 )
 
+# functions that neutralize user input — if the value passes through one of
+# these, the flow is considered safe and is not reported.
+_SANITIZER_RE = re.compile(
+    r"(?i)\b(int|float|bool|escape|html\.escape|markupsafe\.escape|sanitize|"
+    r"clean|bleach\.clean|DOMPurify|validate|quote|shlex\.quote|"
+    r"parameterize|encodeURIComponent|encodeURI|Number|parseInt|parseFloat)\s*\("
+)
+
 # dangerous sinks: (regex, human label)
 _SINKS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)\b(execute|executemany|executescript|raw)\s*\("), "a SQL query (SQL injection)"),
@@ -59,6 +67,11 @@ def find_taint_flows(lines: list[str]):
             if not m:
                 continue
             name, rhs = m.group(1), m.group(2)
+            # A value that passes through a sanitizer is considered clean, and it
+            # also cleanses the variable it is assigned to.
+            if _SANITIZER_RE.search(rhs):
+                tainted.discard(name)
+                continue
             if _SOURCE_RE.search(rhs) or any(_word_in(t, rhs) for t in tainted):
                 tainted.add(name)
         if len(tainted) == before:
@@ -75,8 +88,12 @@ def find_taint_flows(lines: list[str]):
             if not sm:
                 continue
             # a tainted variable used in the sink's arguments (after the sink name)
-            used = next((t for t in sorted(tainted) if _word_in(t, line[sm.start():])), None)
+            args = line[sm.start():]
+            used = next((t for t in sorted(tainted) if _word_in(t, args)), None)
             if not used:
+                continue
+            # the value is sanitized right at the sink, e.g. execute(int(uid))
+            if _SANITIZER_RE.search(args):
                 continue
             # skip the line that merely assigns the taint (that's the source, not a sink use)
             if assign and assign.group(1) == used and sink_re.search(assign.group(2) or "") is None:

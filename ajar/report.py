@@ -11,8 +11,26 @@ import os
 import sys
 from collections import Counter
 from collections.abc import Sequence
+from datetime import date
 
+from . import __version__
 from .models import Finding, Rule, Severity
+
+# How much each finding subtracts from a perfect 100 when grading a project.
+_SEVERITY_WEIGHT = {
+    Severity.CRITICAL: 25,
+    Severity.HIGH: 10,
+    Severity.MEDIUM: 4,
+    Severity.LOW: 1,
+    Severity.INFO: 0,
+}
+_SEVERITY_EMOJI = {
+    Severity.CRITICAL: "🔴",
+    Severity.HIGH: "🟠",
+    Severity.MEDIUM: "🟡",
+    Severity.LOW: "🔵",
+    Severity.INFO: "⚪",
+}
 
 _COLORS = {
     Severity.CRITICAL: "\033[95m",  # magenta
@@ -147,6 +165,100 @@ def render_markdown_rules(rules: Sequence[Rule]) -> str:
                 lines.append(f"- **Reference:** {ref}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _grade(findings: Sequence[Finding]) -> tuple[str, int]:
+    """Return a letter grade and a 0-100 score from the findings."""
+    penalty = sum(_SEVERITY_WEIGHT[f.rule.severity] for f in findings)
+    score = max(0, 100 - penalty)
+    if not findings:
+        return "A+", 100
+    for cutoff, letter in [(90, "A"), (80, "B"), (70, "C"), (60, "D")]:
+        if score >= cutoff:
+            return letter, score
+    return "F", score
+
+
+def render_report(findings: Sequence[Finding], scanned_root: str) -> str:
+    """A professional Markdown security-audit report with a grade."""
+    grade, score = _grade(findings)
+    counts = Counter(f.rule.severity for f in findings)
+    by_category = Counter(f.rule.category for f in findings)
+    crit = counts.get(Severity.CRITICAL, 0)
+    high = counts.get(Severity.HIGH, 0)
+
+    if not findings:
+        verdict = "No issues detected by automated analysis. This is a strong signal, not a guarantee."
+    elif crit:
+        verdict = f"**Action required.** {crit} critical issue(s) can likely be exploited directly — fix these first."
+    elif high:
+        verdict = f"**Needs attention.** {high} high-severity issue(s) represent real risk under the right conditions."
+    else:
+        verdict = "Mostly hardening and defense-in-depth items — no critical/high exposure found."
+
+    out: list[str] = []
+    out.append("# 🔒 Security Audit Report")
+    out.append("")
+    out.append(f"**Project:** `{scanned_root}`  ")
+    out.append(f"**Date:** {date.today().isoformat()}  ")
+    out.append(f"**Tool:** ajar v{__version__} (defensive static analysis)")
+    out.append("")
+    out.append(f"## Security grade: {grade}  ({score}/100)")
+    out.append("")
+    out.append(verdict)
+    out.append("")
+
+    out.append("## Summary")
+    out.append("")
+    out.append("| Severity | Count |")
+    out.append("|---|---:|")
+    for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
+        if counts.get(sev):
+            out.append(f"| {_SEVERITY_EMOJI[sev]} {sev.value} | {counts[sev]} |")
+    out.append(f"| **Total** | **{len(findings)}** |")
+    out.append("")
+    if by_category:
+        cats = " · ".join(f"{cat} ({n})" for cat, n in by_category.most_common())
+        out.append(f"**By category:** {cats}")
+        out.append("")
+
+    if findings:
+        out.append("## Findings")
+        out.append("")
+        for sev in [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO]:
+            group = [f for f in findings if f.rule.severity is sev]
+            if not group:
+                continue
+            out.append(f"### {_SEVERITY_EMOJI[sev]} {sev.value.capitalize()} ({len(group)})")
+            out.append("")
+            for f in group:
+                out.append(f"- **{f.rule.name}** — `{f.path}:{f.line}`  ")
+                out.append(f"  `{f.evidence}`  ")
+                if f.rule.why:
+                    out.append(f"  *Why:* {f.rule.why}  ")
+                if f.rule.fix:
+                    out.append(f"  *Fix:* {f.rule.fix}")
+                out.append("")
+
+        out.append("## Prioritized remediation")
+        out.append("")
+        order = [Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW]
+        step = 1
+        for sev in order:
+            n = counts.get(sev, 0)
+            if n:
+                out.append(f"{step}. Fix the **{n} {sev.value}** finding(s) — {_SEVERITY_EMOJI[sev]} start here." if step == 1 else f"{step}. Then address the **{n} {sev.value}** finding(s).")
+                step += 1
+        out.append("")
+
+    out.append("---")
+    out.append("")
+    out.append(
+        "> ajar is a defensive static-analysis aid. A clean report is a strong result, "
+        "not a guarantee — business-logic and design flaws need a human review, and "
+        "anything critical warrants a professional audit."
+    )
+    return "\n".join(out) + "\n"
 
 
 def render_sarif(findings: Sequence[Finding], scanned_root: str) -> str:
