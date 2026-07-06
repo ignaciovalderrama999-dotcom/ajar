@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator
+from dataclasses import replace
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -11,6 +12,30 @@ from .entropy import find_high_entropy
 from .models import Finding, Rule, Severity
 from .parsing import analyze
 from .rules import compile_rules
+from .taint import find_taint_flows
+
+# Built-in rule for taint analysis (data-flow, not a regex pattern): user input
+# tracked across variables into a dangerous sink.
+TAINT_RULE = Rule(
+    id="TAINT_USER_INPUT_TO_SINK",
+    name="User input flows into a dangerous operation",
+    severity=Severity.HIGH,
+    category="injection",
+    message="User input reaches a dangerous operation through a variable.",
+    pattern="",  # handled by the taint engine, not regex
+    why=(
+        "A value taken from the request is stored in a variable and later used "
+        "in a sensitive operation without visible sanitization — a real, "
+        "exploitable injection path that single-line pattern rules cannot see."
+    ),
+    fix=(
+        "Sanitize or parameterize the value at the sink: parameterized queries "
+        "for SQL, argument lists (no shell) for commands, escaping/DOMPurify for "
+        "HTML, allow-listing for file paths and outbound URLs."
+    ),
+    references=("https://owasp.org/Top10/A03_2021-Injection/",),
+    context="any",
+)
 
 # Built-in rule for entropy-based detection (not a YAML regex rule, since it
 # needs to measure randomness rather than match a pattern).
@@ -197,3 +222,21 @@ def _scan_text(
                 evidence=line.strip()[:200],
             )
             break  # one entropy finding per line is enough
+
+    # Taint analysis (data-flow): user input flowing into a dangerous sink,
+    # possibly several lines away — exploitable flows per-line patterns can't see.
+    all_lines = text.splitlines()
+    for tlineno, tcol, label, var in find_taint_flows(all_lines):
+        tline = all_lines[tlineno - 1]
+        ignored = _ignored_rule_ids(tline)
+        if ignored is not None and (not ignored or TAINT_RULE.id in ignored):
+            continue
+        if regions is not None and regions.in_comment(tlineno - 1, len(tline[:tcol].encode("utf-8"))):
+            continue
+        yield Finding(
+            rule=replace(TAINT_RULE, message=f"User input reaches {label} through variable '{var}'."),
+            path=display_path,
+            line=tlineno,
+            column=tcol + 1,
+            evidence=tline.strip()[:200],
+        )

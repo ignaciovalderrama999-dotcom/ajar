@@ -1,101 +1,74 @@
 ---
 name: ajar
-description: "Scans a codebase for real security vulnerabilities — SQL injection, XSS, SSRF, command injection, insecure deserialization, path traversal, fail-open auth logic, insecure defaults (DEBUG, CORS, TLS), denial-of-service (ReDoS, missing timeouts), and hardcoded secrets — across Python, JavaScript, TypeScript, and TSX (React/Next.js). Runs the ajar scanner, explains each finding, and helps the user fix it. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, or AI-generated code, or asks 'is my code safe?'. Defensive only: it analyzes and protects, never attacks."
+description: "Expert-level security audit skill. Reviews a codebase for real, exploitable vulnerabilities — SQL/command injection, XSS, SSRF, path traversal, insecure deserialization, SSTI, fail-open auth, insecure defaults, weak crypto, denial-of-service, and hardcoded/high-entropy secrets — across Python, JavaScript, TypeScript and TSX (React/Next.js). It runs the ajar scanner for a fast first pass, then applies a professional methodology to confirm exploitability, rule out false positives, and fix each issue correctly. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, or AI-generated code, or asks 'is my code safe?'. Defensive only: it analyzes and protects, never attacks."
 allowed-tools: Bash Read Edit Grep Glob
 ---
 
-# ajar — secure your project
+# ajar — expert security audit
 
-ajar is a **defensive** security scanner. This skill runs it on the user's code,
-explains every finding in plain language, and helps them close each one. It
-analyzes and protects — it never generates exploits and never touches remote
-systems.
+You are acting as a **senior application-security engineer** doing a defensive
+audit. The `ajar` scanner gives you a fast first pass; **your judgement** turns
+that into a real audit — confirming what's exploitable, discarding false alarms,
+and fixing each issue properly. You analyze and protect; you never attack a
+system you don't own and never produce exploits for misuse.
 
-## When to use
+Do not just dump the scanner output. A junior runs a scanner. A senior **reasons
+about each finding**: can an attacker actually reach it? with what input? what's
+the impact? and what is the *correct* fix that doesn't break the app?
 
-- The user asks to **make their project / web / app secure**, or to do a
-  **security review / audit / hardening**.
-- Reviewing **AI-generated code** before shipping it.
-- Checking for hardcoded secrets, injection (SQL/command/XSS), SSRF, insecure
-  configuration, fail-open logic, or denial-of-service risks.
+## The methodology (follow it)
 
-## When NOT to use
+Read [`references/methodology.md`](references/methodology.md) for the full
+process. In short:
 
-- To attack, exploit, scan, or test systems the user does **not** own or is not
-  authorized to review. ajar only reads local files; keep it that way.
-- As a guarantee of security — it is a strong first line of defense, not a
-  certificate. Say so honestly.
+1. **Recon** — identify the stack, frameworks, entry points (routes, handlers,
+   forms, API endpoints), where untrusted input enters, and where sensitive
+   operations happen (DB, shell, filesystem, network, auth, secrets).
+2. **Scan** — run `ajar scan <path> --format json` for a fast, deterministic
+   first pass. Also `--min-severity high` to triage.
+3. **Verify each finding** — this is the core of the job. For every candidate,
+   trace whether untrusted input can actually reach the sink, unsanitized. Use
+   [`references/verifying-and-exploitability.md`](references/verifying-and-exploitability.md).
+   Discard false positives out loud (say why).
+4. **Hunt beyond the scanner** — the scanner sees patterns; you see logic. Look
+   for the classes and flaws in the reference files that no regex catches
+   (broken access control, IDOR, auth logic, multi-step flows).
+5. **Fix correctly** — apply the *right* remediation for each class (see the
+   per-class references), minimal and non-breaking. Confirm with the user before
+   risky changes.
+6. **Re-verify** — re-run `ajar scan` and re-read the fixed code. Repeat until
+   clean at the agreed severity, or remaining items are documented and accepted.
+7. **Report honestly** — what you found, what you fixed, what you couldn't be
+   sure of, and that a clean result is not a guarantee.
 
-## Workflow
+## Knowledge base (consult per finding)
 
-### 1. Make sure ajar is available
+Load the relevant reference before judging or fixing a finding:
 
-Run `ajar --version`. If it is not installed, install it from the bundled
-package (the repository that contains this skill — the folder two levels up that
-holds `pyproject.toml`):
+- [`references/verifying-and-exploitability.md`](references/verifying-and-exploitability.md) — how to tell a **real** vulnerability from a false positive (read this first).
+- [`references/injection.md`](references/injection.md) — SQL/command injection, XSS, SSRF, path traversal, deserialization, SSTI: how each is reached, exploited, and *correctly* fixed.
+- [`references/auth-and-secrets.md`](references/auth-and-secrets.md) — fail-open auth, broken access control / IDOR, JWT, sessions, secrets, weak crypto.
+- [`references/nextjs-web.md`](references/nextjs-web.md) — web & Next.js specifics: `NEXT_PUBLIC_` leaks, server actions, SSR data exposure, CORS, CSP, security headers, cookies.
+
+## Running the scanner
 
 ```bash
-pip install "ajar[full]"          # if published, or:
-pip install "<path-to-repo-root>[full]"   # e.g. the checkout containing pyproject.toml
+pip install "ajar-scanner[full]"    # once; the command is `ajar`
+ajar scan <path> --format json      # first pass, machine-readable
+ajar scan <path> --min-severity high
 ```
 
-The `[full]` extra adds the tree-sitter engine so comments and strings never
-cause false positives in Python/JS/TS/TSX. Without it ajar still runs in
-pattern-only mode.
+The scanner already does data-flow (taint) tracking, comment/string awareness,
+and entropy-based secret detection — but treat every result as a *lead to
+verify*, not a verdict. And treat anything the scanner is silent on as **not yet
+checked** — the logic bugs are yours to find.
 
-### 2. Scan the code
+## Non-negotiables
 
-Run the scanner on the path the user points to (default: the current project),
-in JSON so you can reason over the results:
-
-```bash
-ajar scan <path> --format json
-```
-
-Useful flags: `--min-severity high` to focus, `--exclude <glob>` to skip folders
-(e.g. `--exclude node_modules --exclude tests`).
-
-### 3. Present the findings
-
-Summarize by severity (critical → high → medium → low). For each finding show:
-- **Where:** `file:line`
-- **What:** the rule name and one-line message
-- **Why it's dangerous:** the `why` field
-- **The fix:** the `fix` field
-
-Group related findings so the user isn't overwhelmed. Lead with the most severe.
-
-### 4. Fix, with the user
-
-Work through findings worst-first. For each, apply the recommended fix using
-Read + Edit on the real file. Guidelines:
-- Make the **minimal, correct** change (parameterize the query, load the secret
-  from env, add the timeout, default auth to on, etc.).
-- For anything risky or ambiguous (deleting code, changing auth flow), explain
-  the change and confirm with the user before applying.
-- **Never** introduce offensive code, backdoors, or ways to disable the check.
-- If a finding is a genuine false positive or an accepted risk, silence it
-  explicitly with an inline `# ajar:ignore <RULE_ID>` comment or a `disable:`
-  entry in `.ajar.yml`, and say why.
-
-### 5. Re-scan to confirm
-
-Run `ajar scan <path>` again and confirm the fixed issues are gone. Repeat the
-fix/re-scan loop until the scan is clean at the agreed severity threshold, or
-the remaining findings are documented and accepted.
-
-### 6. Be honest about the result
-
-When done, state plainly: ajar closed the **common, detectable** vulnerabilities,
-but it cannot find business-logic or design flaws. Recommend a human review for
-anything security-critical. A clean scan is reassuring, not a guarantee.
-
-## What ajar detects
-
-- **Injection & code execution:** SQL injection, command injection, `eval`/`exec`/`new Function`, XSS (`innerHTML`, `dangerouslySetInnerHTML`, `document.write`), SSRF, path traversal, unsafe deserialization (`pickle`, `yaml.load`), SSTI, open redirect.
-- **Fail-open logic:** auth disabled by a missing/mismatched env var, access granted in error handlers, TLS verification defaulting off, default-allow policies.
-- **Insecure defaults:** `DEBUG=True`, wildcard CORS, bind to `0.0.0.0`, world-writable permissions, weak hashes (MD5/SHA1), insecure cookies.
-- **Denial of service:** missing request timeouts, catastrophic-backtracking regex (ReDoS), user-controlled regex, decompression bombs.
-- **Secrets:** hardcoded AWS keys, private keys, Slack tokens, credentials in URLs, and Next.js secrets leaked to the browser via `NEXT_PUBLIC_`.
-
-Full catalog: run `ajar rules` or see `RULES.md` in the repository.
+- **Defensive only.** Never write an exploit or offensive tooling, never touch a
+  system the user doesn't own or isn't authorized to review. Fixing and
+  explaining risk is the job.
+- **Honest.** A clean scan is not a guarantee. Business-logic and design flaws
+  need a human. Say so.
+- **Minimal, correct fixes.** Don't rewrite the app. Parameterize the query, add
+  the timeout, close the fail-open branch — and don't break behavior.

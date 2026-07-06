@@ -144,6 +144,30 @@ def test_entropy_ignores_prose_and_paths(tmp_path, rules):
     assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
 
 
+def test_taint_flags_cross_line_flow(tmp_path, rules):
+    # User input stored in a variable and used in a sink several lines later —
+    # pattern rules can't see it, taint analysis must.
+    f = tmp_path / "app.py"
+    f.write_text(
+        "def h():\n"
+        "    uid = request.args.get('id')\n"
+        "    q = build(uid)\n"
+        "    cursor.execute(q)\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
+
+
+def test_taint_quiet_on_safe_flow(tmp_path, rules):
+    f = tmp_path / "app.py"
+    f.write_text(
+        "def h():\n"
+        "    x = get_config('id')\n"
+        "    q = 'SELECT 1'\n"
+        "    cursor.execute(q)\n"
+    )
+    assert not any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
+
+
 def test_redos_does_not_flag_math(tmp_path, rules):
     # Arithmetic like (a * b) * c must NOT be mistaken for a catastrophic regex.
     f = tmp_path / "anim.js"

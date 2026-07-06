@@ -67,6 +67,9 @@ understand the real structure of your code. That means:
   in Python *and* in your TypeScript/Next.js files.
 - Secrets are still caught **inside** strings (that's where they hide), while
   code checks are only applied to real code.
+- **Data-flow (taint) tracking** follows user input across variables into a
+  dangerous sink — catching exploitable injections that single-line patterns miss
+  (e.g. `q = build(request.args['id']); cursor.execute(q)`).
 
 No parsers installed? ajar falls back to fast pattern scanning and still works —
 so it's "pro by default" without ever being fragile.
