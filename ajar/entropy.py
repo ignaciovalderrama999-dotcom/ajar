@@ -14,6 +14,11 @@ import re
 # quoted string literals between 20 and 120 chars (secrets live in that range)
 _STRING_RE = re.compile(r"""(['"])([^'"\n\\]{20,120})\1""")
 
+# a file path/asset reference: has a path separator and ends in a short
+# extension, e.g. "/components/cart_DASHBOARD_V10.html" or "./assets/logo.png".
+# These often mix case and digits like a real secret, but are not one.
+_PATH_RE = re.compile(r"^\.{0,2}/?[\w.\-]+(/[\w.\-]+)*\.[A-Za-z0-9]{1,5}$")
+
 
 def shannon_entropy(value: str) -> float:
     """Bits of entropy per character (0 = uniform, higher = more random)."""
@@ -30,6 +35,8 @@ def _looks_like_token(value: str) -> bool:
     """Random credentials mix cases and digits; prose and paths do not."""
     if " " in value:
         return False  # prose, not a token
+    if "/" in value and _PATH_RE.match(value):
+        return False  # a file path / asset reference, not a secret
     has_lower = any(c.islower() for c in value)
     has_upper = any(c.isupper() for c in value)
     has_digit = any(c.isdigit() for c in value)

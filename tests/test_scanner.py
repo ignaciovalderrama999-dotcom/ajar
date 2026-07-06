@@ -144,6 +144,22 @@ def test_entropy_ignores_prose_and_paths(tmp_path, rules):
     assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
 
 
+def test_entropy_ignores_mixed_case_asset_path(tmp_path, rules):
+    # Found auditing a real project: a file path mixing case/digits (an asset
+    # name, not a secret) was flagged by the entropy heuristic.
+    f = tmp_path / "sw.js"
+    f.write_text("const url = '/components/cart_DASHBOARD_V10.html';\n")
+    assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
+def test_entropy_still_flags_secret_with_slash(tmp_path, rules):
+    # A base64-ish secret can legitimately contain a slash; must not be
+    # swallowed by the new path exclusion (no recognizable extension at the end).
+    f = tmp_path / "cfg.py"
+    f.write_text('key = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8/"\n')
+    assert any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
 def test_taint_flags_cross_line_flow(tmp_path, rules):
     # User input stored in a variable and used in a sink several lines later —
     # pattern rules can't see it, taint analysis must.
