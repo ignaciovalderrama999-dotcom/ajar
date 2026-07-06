@@ -121,9 +121,9 @@ ajar isn't trying to replace the big scanners — it fills a gap next to them.
 ## Install
 
 ```bash
-pip install "ajar[full]"   # recommended: includes the tree-sitter engine
-pip install ajar           # lightweight: pattern scanning only
-# or, from source:
+pip install "ajar-scanner[full]"   # recommended: includes the tree-sitter engine
+pip install ajar-scanner           # lightweight: pattern scanning only
+# the command is `ajar` either way. Or from source:
 git clone https://github.com/ignaciovalderrama999-dotcom/ajar && cd ajar && pip install ".[full]"
 ```
 
@@ -195,7 +195,7 @@ ajar returns a non-zero exit code when it finds an issue at or above
 step to your GitHub Actions workflow:
 
 ```yaml
-- run: pip install "ajar[full]"
+- run: pip install "ajar-scanner[full]"
 - run: ajar scan . --fail-on high
 ```
 
