@@ -157,6 +157,38 @@ def test_taint_flags_cross_line_flow(tmp_path, rules):
     assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
 
 
+def test_taint_ignores_same_origin_fetch(tmp_path, rules):
+    # Found auditing a real Next.js app: a relative-path fetch with dynamic
+    # query params is same-origin, not SSRF. new URLSearchParams() is a generic
+    # builder, not a taint source either.
+    f = tmp_path / "Feed.tsx"
+    f.write_text(
+        "const params = new URLSearchParams();\n"
+        'const res = await fetch(`/api/account/activity?${params.toString()}`);\n'
+    )
+    assert scan_path(f, rules) == []
+
+
+def test_taint_flags_real_ssrf_and_real_search_params(tmp_path, rules):
+    f1 = tmp_path / "a.ts"
+    f1.write_text(
+        "export async function GET(req) {\n"
+        '  const target = req.nextUrl.searchParams.get("url");\n'
+        "  const res = await fetch(target);\n"
+        "}\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f1, rules))
+
+    f2 = tmp_path / "b.ts"
+    f2.write_text(
+        "export async function GET(req) {\n"
+        '  const id = req.nextUrl.searchParams.get("id");\n'
+        "  cursor.execute(id);\n"
+        "}\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f2, rules))
+
+
 def test_taint_respects_sanitizer(tmp_path, rules):
     # Input validated with int() before the sink must NOT be flagged.
     f = tmp_path / "app.py"

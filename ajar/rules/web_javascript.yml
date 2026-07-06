@@ -55,7 +55,11 @@ rules:
     severity: high
     category: injection
     message: An outbound request uses a URL derived from the request/input.
-    pattern: '(?i)(fetch|axios(\.\w+)?)\s*\(\s*[^)]*(req\.|request\.|searchParams|params\.|query\.|body\.|input)'
+    # A leading same-origin slash right after the call (fetch("/api/...")) means
+    # only the path/query is dynamic and the host is fixed — not SSRF. Only flag
+    # when the URL itself (not just query params on a fixed relative path) is
+    # built from request/user input.
+    pattern: '(?i)(fetch|axios(\.\w+)?)\s*\(\s*(?![`''"]\/)[^)]*(req\.|request\.|searchParams|params\.|query\.|body\.|input)'
     extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]
     why: >
       If users control the target URL, they can make your server (in a Next.js

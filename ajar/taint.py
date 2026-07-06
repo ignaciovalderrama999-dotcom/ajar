@@ -18,11 +18,14 @@ import re
 # `name = <expr>`  (optionally with const/let/var/val)
 _ASSIGN_RE = re.compile(r"^\s*(?:const|let|var|final|val)?\s*([A-Za-z_$][\w$]*)\s*=\s*(.+)$")
 
-# things that produce user-controlled input
+# things that produce user-controlled input. `\.searchParams\b` (a property
+# access) is deliberately narrower than the bare word "searchParams" so that
+# building a *new* URLSearchParams() (a generic query-string builder, not a
+# request source) is not mistaken for tainted input.
 _SOURCE_RE = re.compile(
-    r"(?i)(request\.|req\.|\.args\b|\.query\b|\.params\b|\.body\b|searchParams"
+    r"(?i)(request\.|req\.|\.args\b|\.query\b|\.params\b|\.body\b|\.searchParams\b"
     r"|\binput\s*\(|sys\.argv|process\.argv|request\.form|get_json|request\.data"
-    r"|params\[|url\.searchParams|formData\.get)"
+    r"|params\[|formData\.get)"
 )
 
 # functions that neutralize user input — if the value passes through one of
@@ -47,6 +50,10 @@ _SINKS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)pickle\.loads?\s*\("), "deserialization (RCE)"),
     (re.compile(r"(?i)(fetch|requests\.\w+|urlopen)\s*\("), "an outbound request (SSRF)"),
 ]
+
+# A literal same-origin path right at the call, e.g. fetch("/api/x"...): the
+# host is fixed, so tainted query params appended after it are not SSRF.
+_SAME_ORIGIN_RE = re.compile(r"""^\s*['"`]/""")
 
 
 def _word_in(name: str, text: str) -> bool:
@@ -94,6 +101,10 @@ def find_taint_flows(lines: list[str]):
                 continue
             # the value is sanitized right at the sink, e.g. execute(int(uid))
             if _SANITIZER_RE.search(args):
+                continue
+            # a same-origin relative URL literal: only the query string is
+            # tainted, the host is fixed — not an SSRF-shaped flow
+            if label.startswith("an outbound request") and _SAME_ORIGIN_RE.match(args):
                 continue
             # skip the line that merely assigns the taint (that's the source, not a sink use)
             if assign and assign.group(1) == used and sink_re.search(assign.group(2) or "") is None:
