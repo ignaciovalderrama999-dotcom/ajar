@@ -128,9 +128,10 @@ def test_detects_redos_and_decompression_bomb(tmp_path, rules):
 
 
 def test_entropy_flags_random_secret(tmp_path, rules):
-    # A random token that matches no vendor pattern should still be caught.
+    # A random secret assigned to a NON-secret-looking variable: no vendor
+    # pattern and no secret keyword catch it, so only entropy can.
     f = tmp_path / "cfg.py"
-    f.write_text('token = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8"\n')
+    f.write_text('config_value = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8"\n')
     assert any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
 
 
