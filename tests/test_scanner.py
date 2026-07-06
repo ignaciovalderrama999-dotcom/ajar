@@ -127,6 +127,22 @@ def test_detects_redos_and_decompression_bomb(tmp_path, rules):
     assert "DOS_DECOMPRESSION_BOMB" in ids
 
 
+def test_entropy_flags_random_secret(tmp_path, rules):
+    # A random token that matches no vendor pattern should still be caught.
+    f = tmp_path / "cfg.py"
+    f.write_text('token = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8"\n')
+    assert any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
+def test_entropy_ignores_prose_and_paths(tmp_path, rules):
+    f = tmp_path / "cfg.py"
+    f.write_text(
+        'msg = "hola como estas todo bien por aca amigo"\n'
+        'path = "src/components/Hero/HeroScene/index"\n'
+    )
+    assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
 def test_redos_does_not_flag_math(tmp_path, rules):
     # Arithmetic like (a * b) * c must NOT be mistaken for a catastrophic regex.
     f = tmp_path / "anim.js"

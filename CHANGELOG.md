@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Entropy-based secret detection** (`SECRET_HIGH_ENTROPY`): catches random,
+  high-entropy strings that match no known vendor pattern — an independent
+  implementation of the Shannon-entropy technique, tuned to ignore prose, paths,
+  and ids to keep false positives low.
+
+### Changed
+- `DOS_REDOS_NESTED_QUANTIFIER` is now precise (pattern `[+*]\)[+*]`): it no
+  longer mistakes arithmetic like `(a * b) * c` for a catastrophic regex.
+
+### Earlier Unreleased
 - **Structural analysis engine (tree-sitter)** for Python, JavaScript,
   TypeScript, and TSX, available via `pip install ajar[full]`. Matches inside
   comments and string literals are ignored (killing the biggest class of false

@@ -7,9 +7,33 @@ from collections.abc import Iterable, Iterator
 from fnmatch import fnmatch
 from pathlib import Path
 
-from .models import Finding, Rule
+from .entropy import find_high_entropy
+from .models import Finding, Rule, Severity
 from .parsing import analyze
 from .rules import compile_rules
+
+# Built-in rule for entropy-based detection (not a YAML regex rule, since it
+# needs to measure randomness rather than match a pattern).
+ENTROPY_RULE = Rule(
+    id="SECRET_HIGH_ENTROPY",
+    name="High-entropy string (possible hardcoded secret)",
+    severity=Severity.MEDIUM,
+    category="secrets",
+    message="A random-looking string may be a hardcoded secret or token.",
+    pattern="",  # handled by the entropy engine, not regex
+    why=(
+        "Random, high-entropy strings in source are often API keys, tokens, or "
+        "passwords that match no known vendor pattern — so pattern scanners miss "
+        "them, but attackers scraping repos do not."
+    ),
+    fix=(
+        "If this is a secret, move it to an environment variable or a secrets "
+        "manager and rotate it. If it is not a secret (a hash, an id), silence it "
+        "with a trailing  # ajar:ignore SECRET_HIGH_ENTROPY  comment."
+    ),
+    references=("https://cwe.mitre.org/data/definitions/798.html",),
+    context="any",
+)
 
 # Directories we never descend into — noise, not source.
 SKIP_DIRS = {
@@ -124,6 +148,7 @@ def _scan_text(
 
     for lineno, line in enumerate(text.splitlines(), start=1):
         suppressed = _ignored_rule_ids(line)
+        line_has_secret = False
         for rule, pattern in compiled:
             if not _rule_applies(rule, file_path):
                 continue
@@ -144,6 +169,8 @@ def _scan_text(
                         continue
                     if ctx == "code" and regions.in_string(row, byte_col):
                         continue
+            if rule.category == "secrets":
+                line_has_secret = True
             yield Finding(
                 rule=rule,
                 path=display_path,
@@ -151,3 +178,22 @@ def _scan_text(
                 column=match.start() + 1,
                 evidence=line.strip()[:200],
             )
+
+        # Entropy-based secret detection. Only if no known-pattern secret already
+        # matched this line (avoids double-reporting), the rule isn't suppressed,
+        # and the match is not inside a comment.
+        if line_has_secret:
+            continue
+        if suppressed is not None and (not suppressed or ENTROPY_RULE.id in suppressed):
+            continue
+        for col, _value in find_high_entropy(line):
+            if regions is not None and regions.in_comment(lineno - 1, len(line[:col].encode("utf-8"))):
+                continue
+            yield Finding(
+                rule=ENTROPY_RULE,
+                path=display_path,
+                line=lineno,
+                column=col + 1,
+                evidence=line.strip()[:200],
+            )
+            break  # one entropy finding per line is enough

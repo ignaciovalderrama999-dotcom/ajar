@@ -10,7 +10,7 @@
   <img alt="CI" src="https://github.com/ignaciovalderrama999-dotcom/ajar/actions/workflows/ci.yml/badge.svg">
   <img alt="license" src="https://img.shields.io/badge/license-Apache_2.0-green">
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-blue">
-  <img alt="rules" src="https://img.shields.io/badge/rules-44-informational">
+  <img alt="rules" src="https://img.shields.io/badge/rules-56%2B-informational">
   <img alt="languages" src="https://img.shields.io/badge/lang-Py%20·%20JS%20·%20TS%20·%20TSX-blue">
   <img alt="local only" src="https://img.shields.io/badge/telemetry-none-brightgreen">
   <img alt="stance" src="https://img.shields.io/badge/stance-analyze%20%26%20protect-blueviolet">
@@ -52,7 +52,7 @@ Point ajar at a web app or SaaS backend and it flags five families of risk:
 | ⚙️ **insecure-defaults** | `DEBUG=True`, wildcard CORS, `0.0.0.0` binds, weak hashes, insecure cookies |
 | 💉 **injection** *(web)* | SQL injection, command injection, XSS, SSRF, path traversal, unsafe deserialization, SSTI, open redirect |
 | 🌊 **denial-of-service** | missing timeouts, catastrophic-backtracking regex (ReDoS), decompression bombs, user-controlled regex |
-| 🔑 **secrets** | hardcoded AWS keys, private keys, tokens, credentials in URLs |
+| 🔑 **secrets** | hardcoded AWS/GitHub/Google/Stripe/OpenAI keys, private keys, tokens, credentials in URLs, **plus entropy-based detection** for random secrets that match no known pattern |
 
 Works on **Python, JavaScript, TypeScript, and TSX (React/Next.js)**. Every rule
 is defensive — it explains the attack and the safe fix, and never produces an exploit.
