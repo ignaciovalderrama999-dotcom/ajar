@@ -1,0 +1,84 @@
+# Injection & insecure-deserialization rules for C# / .NET.
+rules:
+  - id: SQLI_CSHARP
+    name: SQL query built with concatenation or interpolation (C#)
+    severity: critical
+    category: injection
+    message: A SqlCommand/CommandText is built from a concatenated or interpolated string.
+    pattern: '(?i)(new\s+SqlCommand|CommandText\s*=)\s*\(?\s*(\$"|@?"[^"]*"\s*\+)'
+    extensions: [".cs"]
+    why: >
+      Building SQL with "+" or an interpolated $"...{value}" string splices user
+      input straight into the query. If any value is user-controlled, the query
+      can be rewritten (SQL injection) — read or dump the whole database.
+    fix: >
+      Use parameterized queries: cmd.Parameters.AddWithValue("@id", id) with a
+      "@id" placeholder in the SQL text, or an ORM (EF Core) with parameters.
+      Never concatenate or interpolate values into the query string.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: CMDI_CSHARP_PROCESS
+    name: Process started with a concatenated/interpolated command (C#)
+    severity: high
+    category: injection
+    message: Process.Start builds its command/arguments from a dynamic string.
+    pattern: '(?i)Process\.Start\s*\(\s*(\$"|@?"[^"]*"\s*\+)'
+    extensions: [".cs"]
+    why: >
+      Passing a command line built from user input to Process.Start lets an
+      attacker inject extra arguments or commands.
+    fix: >
+      Use ProcessStartInfo with UseShellExecute=false, set FileName to a fixed
+      executable, and pass each argument via ArgumentList (not a built string).
+    references:
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: DESERIAL_CSHARP_BINARYFORMATTER
+    name: Insecure deserialization with BinaryFormatter (C#)
+    severity: critical
+    category: injection
+    message: BinaryFormatter is used to deserialize data.
+    pattern: '(?i)\bnew\s+BinaryFormatter\s*\(|\bBinaryFormatter\s*\.\s*Deserialize'
+    extensions: [".cs"]
+    why: >
+      BinaryFormatter can instantiate arbitrary types while deserializing, which
+      is remote code execution on attacker-controlled data. Microsoft has
+      deprecated it as dangerous.
+    fix: >
+      Do not use BinaryFormatter. Use System.Text.Json (or a schema-validated
+      serializer) for untrusted data.
+    references:
+      - https://cwe.mitre.org/data/definitions/502.html
+
+  - id: XXE_CSHARP
+    name: XML parser configured to process DTDs / external entities (C#)
+    severity: high
+    category: injection
+    message: An XML reader enables DTD parsing or an external XmlResolver.
+    pattern: '(?i)(DtdProcessing\s*=\s*DtdProcessing\.Parse|XmlResolver\s*=\s*new\s+Xml)'
+    extensions: [".cs"]
+    why: >
+      Enabling DTD processing or a resolving XmlResolver on untrusted XML allows
+      XXE — local file read, SSRF, or denial of service.
+    fix: >
+      Set DtdProcessing = DtdProcessing.Prohibit and XmlResolver = null on your
+      XmlReaderSettings before parsing untrusted XML.
+    references:
+      - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
+  - id: CSHARP_WEAK_RANDOM
+    name: Non-cryptographic Random used for a security value (C#)
+    severity: medium
+    category: insecure-defaults
+    message: System.Random is used for a token/password/key.
+    pattern: '(?i)(token|password|secret|otp|nonce|key|salt|reset)\w*\s*=\s*[^;\n]*\bnew\s+Random\s*\('
+    extensions: [".cs"]
+    why: >
+      System.Random is predictable and not for security. Using it for tokens,
+      OTPs, keys or passwords lets an attacker guess or reproduce them.
+    fix: >
+      Use System.Security.Cryptography.RandomNumberGenerator (e.g.
+      RandomNumberGenerator.GetBytes) for any security-sensitive random value.
+    references:
+      - https://cwe.mitre.org/data/definitions/338.html

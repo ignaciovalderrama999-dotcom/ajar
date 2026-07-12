@@ -24,17 +24,52 @@ guarantee of security. Specifically:
 
 You remain solely responsible for the security of your own software.
 
+## ajar does not change your system — you do, and you own the outcome
+
+ajar **only reads and reports.** It does **not** close ports, stop or kill
+processes or services, change firewall rules, delete files, edit configuration,
+or make any change to any machine. Its output is **information and
+recommendations** only.
+
+**Any action taken in response to that output is the user's own action and the
+user's sole responsibility** — including any command run, setting changed, port
+closed, service stopped, file deleted, or system reconfigured, **whether the user
+does it by hand or directs an AI assistant, agent, script, or any automation to
+do it.**
+
+Accordingly, the author and contributors are **not responsible or liable** for
+any damage to a system, data loss, downtime, misconfiguration, or other harm
+resulting from actions the user (or any tool the user directs) chooses to take.
+ajar's included skill instructs assistants to *guide the user* rather than change
+the system, but the user is responsible for what they and their tools ultimately
+do. If you are not comfortable running a change yourself and understanding its
+effect, do not run it.
+
+**This applies regardless of when, where, or how the action is carried out.**
+ajar only outputs information and recommendations. If a user acts on that output
+later, in a different session, in a different program, on a different day, or by
+asking a separate AI assistant or automation that is not running ajar to perform
+the change, that action and its consequences are solely the responsibility of the
+user who chose to act and of whatever tool actually performed it — not of ajar or
+its author. A recommendation is information, not an instruction to act, and the
+decision to act (and how) is an independent choice by the user.
+
 ## Intended and authorized use only
 
-ajar is a **defensive** tool. It is intended to be run **only** on:
+ajar is a **defensive, local-only** tool. It is intended to be run **only** on:
 
 1. source code that **you own**, or
-2. source code that you have **explicit, documented authorization** to analyze.
+2. source code that you have **explicit, documented authorization** to analyze,
+   or
+3. the **local machine you run it on** (for the `ajar host` audit), when that
+   machine is yours or one you are authorized to administer.
 
-ajar analyzes local files and **does not attack, exploit, probe, or interact
-with any remote system**. It must not be used as part of any unauthorized,
-unlawful, or malicious activity. Using this software in violation of any
-applicable law is strictly outside its intended purpose.
+ajar analyzes local files and inspects only the local machine's own state. It
+**does not attack, exploit, probe, port-scan, or interact with any remote
+system**, and the host audit cannot be pointed at another machine without
+rewriting its source. It must not be used as part of any unauthorized, unlawful,
+or malicious activity. Using this software in violation of any applicable law is
+strictly outside its intended purpose.
 
 ## Your responsibility, not the author's
 

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from . import __version__
+from .baseline import DEFAULT_BASELINE, BaselineError, load_baseline, write_baseline
 from .config import Config, ConfigError, find_config, load_config
-from .models import Finding, Severity
+from .models import Severity
 from .report import (
     render_json,
     render_markdown_rules,
@@ -21,7 +21,6 @@ from .rules import RuleError, load_rules
 from .scanner import scan_path
 
 _SEVERITY_CHOICES = [s.value for s in Severity]
-_DEFAULT_BASELINE = ".ajar-baseline.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -87,10 +86,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--baseline",
         type=Path,
         nargs="?",
-        const=Path(_DEFAULT_BASELINE),
+        const=Path(DEFAULT_BASELINE),
         default=None,
         metavar="FILE",
-        help=f"ignore findings recorded in this baseline file (default file: {_DEFAULT_BASELINE})",
+        help=f"ignore findings recorded in this baseline file (default file: {DEFAULT_BASELINE})",
     )
     scan.add_argument(
         "--write-baseline",
@@ -106,6 +105,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="output format (default: terminal)",
     )
 
+    host = sub.add_parser(
+        "host",
+        help="audit THIS machine's local attack surface (listening ports, exposed "
+        "databases/dev servers, firewall). Read-only, local only — never scans other hosts.",
+    )
+    host.add_argument(
+        "--format",
+        choices=["terminal", "json", "report"],
+        default="terminal",
+        help="output format (default: terminal)",
+    )
+    host.add_argument(
+        "--fail-on",
+        choices=_SEVERITY_CHOICES,
+        default="high",
+        help="exit non-zero if a finding at or above this severity exists (default: high)",
+    )
+
     return parser
 
 
@@ -117,21 +134,6 @@ def _resolve(cli_value, config_value, default):
     return default
 
 
-def _load_baseline(path: Path) -> set[str]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise RuleError(f"could not read baseline {path}: {exc}") from exc
-    return set(data.get("fingerprints", []))
-
-
-def _write_baseline(path: Path, findings: list[Finding]) -> None:
-    payload = {
-        "tool": "ajar",
-        "version": __version__,
-        "fingerprints": sorted({f.fingerprint() for f in findings}),
-    }
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def _cmd_scan(args: argparse.Namespace) -> int:
@@ -172,15 +174,15 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     findings = [f for f in findings if f.rule.severity >= min_sev]
 
     if args.write_baseline:
-        target = args.baseline or Path(_DEFAULT_BASELINE)
-        _write_baseline(target, findings)
+        target = args.baseline or Path(DEFAULT_BASELINE)
+        write_baseline(target, findings)
         print(f"ajar: wrote baseline with {len(findings)} findings to {target}")
         return 0
 
     if args.baseline is not None:
         try:
-            known = _load_baseline(args.baseline)
-        except RuleError as exc:
+            known = load_baseline(args.baseline)
+        except BaselineError as exc:
             print(f"ajar: {exc}", file=sys.stderr)
             return 2
         findings = [f for f in findings if f.fingerprint() not in known]
@@ -224,6 +226,36 @@ def _cmd_rules(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_host(args: argparse.Namespace) -> int:
+    from .host import audit_host, host_summary, psutil_available
+
+    if not psutil_available():
+        print(
+            "ajar: the host audit needs psutil — install it with:\n"
+            "  pip install 'ajar-scanner[host]'",
+            file=sys.stderr,
+        )
+        return 2
+
+    findings = audit_host()
+    label = "this machine — local attack surface (read-only, local only)"
+
+    if args.format == "json":
+        print(render_json(findings, label))
+    elif args.format == "report":
+        print(render_report(findings, label))
+    else:
+        print(render_terminal(findings, label))
+        summary = host_summary()
+        if summary:
+            print(f"  {summary}\n")
+
+    fail_sev = Severity(args.fail_on)
+    if any(f.rule.severity >= fail_sev for f in findings):
+        return 1
+    return 0
+
+
 def _force_utf8() -> None:
     # Windows consoles default to a legacy code page that mangles em dashes and
     # other UTF-8 output. Make output portable without touching rule content.
@@ -245,6 +277,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_scan(args)
     if args.command == "rules":
         return _cmd_rules(args)
+    if args.command == "host":
+        return _cmd_host(args)
 
     parser.print_help()
     return 0

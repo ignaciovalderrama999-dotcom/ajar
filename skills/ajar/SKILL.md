@@ -1,6 +1,6 @@
 ---
 name: ajar
-description: "Expert-level security audit skill. Reviews a codebase for real, exploitable vulnerabilities — SQL/command injection, XSS, SSRF, path traversal, insecure deserialization, SSTI, fail-open auth, insecure defaults, weak crypto, denial-of-service, and hardcoded/high-entropy secrets — across Python, JavaScript, TypeScript and TSX (React/Next.js). It runs the ajar scanner for a fast first pass, then applies a professional methodology to confirm exploitability, rule out false positives, and fix each issue correctly. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, or AI-generated code, or asks 'is my code safe?'. Defensive only: it analyzes and protects, never attacks."
+description: "Expert-level security audit skill. Reviews a codebase for real, exploitable vulnerabilities — SQL/NoSQL/command injection, XSS, SSRF, path traversal, insecure deserialization, SSTI, fail-open auth, insecure defaults, weak crypto, denial-of-service, and hardcoded/high-entropy secrets — across Python, JavaScript, TypeScript, TSX (React/Next.js), Go, Java, PHP and C#. It can also audit the LOCAL machine's own attack surface (`ajar host`: listening ports, exposed databases/dev servers, firewall). Runs the ajar scanner for a fast first pass, then applies a professional methodology to confirm exploitability, rule out false positives, and fix code issues correctly. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, AI-generated code, or their own machine, or asks 'is my code/machine safe?'. Defensive and local-only: it analyzes, protects and recommends — it never attacks, never scans other machines, and never modifies system state (ports/services/firewall) on its own."
 allowed-tools: Bash Read Edit Grep Glob
 ---
 
@@ -63,12 +63,34 @@ and entropy-based secret detection — but treat every result as a *lead to
 verify*, not a verdict. And treat anything the scanner is silent on as **not yet
 checked** — the logic bugs are yours to find.
 
+## Host audit (`ajar host`)
+
+`ajar host` reads THIS machine's own listening ports and firewall (read-only,
+local only — it never scans another host). Use it to spot a database or dev
+server accidentally bound to `0.0.0.0`, or a disabled firewall.
+
+**Never change the system's state yourself.** Do **not** close ports, stop or
+kill processes/services, or alter the firewall — even if the user asks you to
+("just close them, I don't know how"). Closing the wrong service can break the
+user's machine or connectivity. Instead:
+
+1. Explain exactly which service is exposed and the real risk.
+2. Give the precise command or setting to fix it, and say **what it does**.
+3. Let the **user** run it, so they understand and consent.
+
+Guiding the user step by step is the job; silently modifying their system is not.
+
 ## Non-negotiables
 
 - **Defensive only.** Never write an exploit or offensive tooling, never touch a
   system the user doesn't own or isn't authorized to review. Fixing and
   explaining risk is the job.
+- **Never modify system state (ports, services, firewall).** Report and guide;
+  the user acts. ajar analyzes and recommends — it does not reconfigure a
+  machine.
 - **Honest.** A clean scan is not a guarantee. Business-logic and design flaws
   need a human. Say so.
-- **Minimal, correct fixes.** Don't rewrite the app. Parameterize the query, add
-  the timeout, close the fail-open branch — and don't break behavior.
+- **Minimal, correct fixes.** For *code* fixes, make the minimal correct change
+  (parameterize the query, add the timeout, close the fail-open branch) and
+  don't break behavior. For *host* findings, never change the system — only
+  advise.

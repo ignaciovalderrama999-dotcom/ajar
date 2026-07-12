@@ -28,11 +28,42 @@ _SUFFIX_LANG = {
     ".cjs": "javascript",
     ".ts": "typescript",
     ".tsx": "tsx",
+    ".go": "go",
+    ".java": "java",
+    ".php": "php",
+    ".cs": "csharp",
 }
 
-_COMMENT_TYPES = {"comment"}
-# non-template string literals (template strings hold interpolated code)
-_STRING_TYPES = {"string"}
+# Node type names for comments/strings differ per grammar, so these are keyed
+# by language rather than global. Masking a string type also hides its
+# sub-nodes (e.g. Java's string_fragment, PHP's string_content) since we never
+# descend into a masked node's children.
+_COMMENT_TYPES_BY_LANG: dict[str, set[str]] = {
+    "python": {"comment"},
+    "javascript": {"comment"},
+    "typescript": {"comment"},
+    "tsx": {"comment"},
+    "go": {"comment"},
+    "java": {"line_comment", "block_comment"},
+    "php": {"comment"},
+    "csharp": {"comment"},
+}
+# non-template string literals (template strings hold interpolated code, so
+# they are deliberately left unmasked — see module docstring).
+_STRING_TYPES_BY_LANG: dict[str, set[str]] = {
+    "python": {"string"},
+    "javascript": {"string"},
+    "typescript": {"string"},
+    "tsx": {"string"},
+    # Go has no built-in string interpolation in either form, so both are safe
+    # to mask like any other string literal.
+    "go": {"interpreted_string_literal", "raw_string_literal"},
+    "java": {"string_literal"},
+    "php": {"string", "encapsed_string"},
+    # C# interpolated strings ($"...{x}") hold code, so only plain string
+    # literals are masked (like JS template literals).
+    "csharp": {"string_literal"},
+}
 
 
 def _raw_language(lang: str):
@@ -53,6 +84,22 @@ def _raw_language(lang: str):
             import tree_sitter_typescript as m
 
             return m.language_tsx()
+        if lang == "go":
+            import tree_sitter_go as m
+
+            return m.language()
+        if lang == "java":
+            import tree_sitter_java as m
+
+            return m.language()
+        if lang == "php":
+            import tree_sitter_php as m
+
+            return m.language_php()
+        if lang == "csharp":
+            import tree_sitter_c_sharp as m
+
+            return m.language()
     except Exception:
         return None
     return None
@@ -120,15 +167,18 @@ def analyze(text: str, suffix: str) -> Regions | None:
     except Exception:
         return None
 
+    comment_types = _COMMENT_TYPES_BY_LANG.get(lang, {"comment"})
+    string_types = _STRING_TYPES_BY_LANG.get(lang, {"string"})
+
     comments: list[tuple[int, int, int, int]] = []
     strings: list[tuple[int, int, int, int]] = []
     stack = [tree.root_node]
     while stack:
         node = stack.pop()
-        if node.type in _COMMENT_TYPES:
+        if node.type in comment_types:
             comments.append((*node.start_point, *node.end_point))
             continue
-        if node.type in _STRING_TYPES:
+        if node.type in string_types:
             strings.append((*node.start_point, *node.end_point))
             continue  # do not descend into a string literal
         stack.extend(node.children)

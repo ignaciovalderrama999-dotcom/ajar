@@ -8,57 +8,11 @@ from dataclasses import replace
 from fnmatch import fnmatch
 from pathlib import Path
 
-from .entropy import find_high_entropy
-from .models import Finding, Rule, Severity
+from .entropy import ENTROPY_RULE, find_high_entropy
+from .models import Finding, Rule
 from .parsing import analyze
 from .rules import compile_rules
-from .taint import find_taint_flows
-
-# Built-in rule for taint analysis (data-flow, not a regex pattern): user input
-# tracked across variables into a dangerous sink.
-TAINT_RULE = Rule(
-    id="TAINT_USER_INPUT_TO_SINK",
-    name="User input flows into a dangerous operation",
-    severity=Severity.HIGH,
-    category="injection",
-    message="User input reaches a dangerous operation through a variable.",
-    pattern="",  # handled by the taint engine, not regex
-    why=(
-        "A value taken from the request is stored in a variable and later used "
-        "in a sensitive operation without visible sanitization — a real, "
-        "exploitable injection path that single-line pattern rules cannot see."
-    ),
-    fix=(
-        "Sanitize or parameterize the value at the sink: parameterized queries "
-        "for SQL, argument lists (no shell) for commands, escaping/DOMPurify for "
-        "HTML, allow-listing for file paths and outbound URLs."
-    ),
-    references=("https://owasp.org/Top10/A03_2021-Injection/",),
-    context="any",
-)
-
-# Built-in rule for entropy-based detection (not a YAML regex rule, since it
-# needs to measure randomness rather than match a pattern).
-ENTROPY_RULE = Rule(
-    id="SECRET_HIGH_ENTROPY",
-    name="High-entropy string (possible hardcoded secret)",
-    severity=Severity.MEDIUM,
-    category="secrets",
-    message="A random-looking string may be a hardcoded secret or token.",
-    pattern="",  # handled by the entropy engine, not regex
-    why=(
-        "Random, high-entropy strings in source are often API keys, tokens, or "
-        "passwords that match no known vendor pattern — so pattern scanners miss "
-        "them, but attackers scraping repos do not."
-    ),
-    fix=(
-        "If this is a secret, move it to an environment variable or a secrets "
-        "manager and rotate it. If it is not a secret (a hash, an id), silence it "
-        "with a trailing  # ajar:ignore SECRET_HIGH_ENTROPY  comment."
-    ),
-    references=("https://cwe.mitre.org/data/definitions/798.html",),
-    context="any",
-)
+from .taint import TAINT_RULE, find_taint_flows
 
 # Directories we never descend into — noise, not source.
 SKIP_DIRS = {

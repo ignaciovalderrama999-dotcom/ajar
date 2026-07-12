@@ -1,0 +1,136 @@
+# Injection rules for Go, Java, and PHP.
+rules:
+  # -------------------------------------------------------------------- Go
+  - id: SQLI_GO_SPRINTF
+    name: SQL query built with fmt.Sprintf
+    severity: critical
+    category: injection
+    message: A SQL query is built with fmt.Sprintf instead of a placeholder.
+    pattern: '(?i)(Query|QueryRow|Exec)\s*\(\s*fmt\.Sprintf'
+    extensions: [".go"]
+    why: >
+      fmt.Sprintf splices values into the query text as a plain string. If any
+      value comes from a user, they can rewrite the query (SQL injection).
+    fix: >
+      Use a parameterized query: db.Query("... WHERE id = $1", id) (or "?" for
+      MySQL), passing values as separate arguments, never formatted into the
+      query string.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: CMDI_GO_SHELL
+    name: Go command run through a shell with a built string
+    severity: high
+    category: injection
+    message: exec.Command runs through sh -c with a concatenated/formatted string.
+    pattern: '(?i)exec\.Command\(\s*"(sh|bash)"\s*,\s*"-c"'
+    extensions: [".go"]
+    why: >
+      Running through a shell means any user input in the command string can
+      inject additional commands via ; | && $(...).
+    fix: >
+      Call exec.Command with the binary and each argument as separate strings
+      (no shell), e.g. exec.Command("ping", "-c", "1", host).
+    references:
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  # ------------------------------------------------------------------ Java
+  - id: SQLI_JAVA_STATEMENT
+    name: SQL query built with string concatenation (Statement)
+    severity: critical
+    category: injection
+    message: A Statement executes a query string built with concatenation.
+    pattern: '(?i)\.(executeQuery|executeUpdate|execute)\s*\(\s*"[^"]*"\s*\+'
+    extensions: [".java"]
+    why: >
+      Concatenating values into SQL text lets an attacker rewrite the query.
+      java.sql.Statement has no way to bind parameters safely.
+    fix: >
+      Use PreparedStatement with "?" placeholders and setString/setInt, never
+      Statement with a concatenated string.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: CMDI_JAVA_RUNTIME_EXEC
+    name: Runtime.exec with a single concatenated command string
+    severity: high
+    category: injection
+    message: Runtime.exec builds a shell command from a concatenated string.
+    pattern: '(?i)Runtime\.getRuntime\(\)\.exec\s*\(\s*"[^"]*"\s*\+'
+    extensions: [".java"]
+    why: >
+      Passing a single concatenated string to exec() is parsed by a shell-like
+      tokenizer; user input can inject extra arguments or commands.
+    fix: >
+      Pass the command and each argument as a String[] array (no shell
+      involved), and validate any dynamic argument.
+    references:
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: XXE_JAVA_DOCUMENT_BUILDER
+    name: XML parser not hardened against XXE
+    severity: high
+    category: injection
+    message: DocumentBuilderFactory is used without disabling external entities.
+    pattern: '(?i)DocumentBuilderFactory\.newInstance\(\)\s*;(?!.*setFeature)'
+    extensions: [".java"]
+    why: >
+      By default this parser resolves external entities and DTDs, allowing XXE
+      (local file read, SSRF, denial of service) on untrusted XML.
+    fix: >
+      Disable external entities and DTDs, e.g. factory.setFeature
+      ("http://apache.org/xml/features/disallow-doctype-decl", true).
+    references:
+      - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+
+  # -------------------------------------------------------------------- PHP
+  - id: SQLI_PHP_CONCAT
+    name: SQL query built with string concatenation (PHP)
+    severity: critical
+    category: injection
+    message: A mysqli/PDO query is executed with a concatenated string.
+    pattern: '(?i)->query\s*\(\s*["''][^"'']*["'']\s*\.'
+    extensions: [".php"]
+    why: >
+      Concatenating values into the query text lets an attacker rewrite it.
+      This is the classic PHP SQL injection pattern.
+    fix: >
+      Use a prepared statement (PDO ->prepare()/bindParam, or mysqli
+      ->prepare()/bind_param) with placeholders instead of concatenation.
+    references:
+      - https://owasp.org/Top10/A03_2021-Injection/
+
+  - id: CMDI_PHP_SHELL
+    name: PHP shell execution with a concatenated string
+    severity: high
+    category: injection
+    message: A shell-executing function is called with a concatenated string.
+    # escapeshellarg()/escapeshellcmd() right after the concatenation is the
+    # standard PHP sanitizer for this exact pattern — don't flag it.
+    pattern: '(?i)\b(shell_exec|system|exec|passthru|popen)\s*\(\s*["''][^"'']*["'']\s*\.(?!\s*escapeshell)'
+    extensions: [".php"]
+    why: >
+      Building the command by concatenation lets an attacker inject additional
+      shell commands via ; | && $(...) if any part is user-controlled.
+    fix: >
+      Avoid shelling out to build dynamic commands; if unavoidable, use
+      escapeshellarg() on every dynamic argument.
+    references:
+      - https://cwe.mitre.org/data/definitions/78.html
+
+  - id: LFI_PHP_INCLUDE
+    name: File included using a path built from request input
+    severity: critical
+    category: injection
+    message: include/require uses a path derived from $_GET/$_POST/$_REQUEST.
+    pattern: '(?i)\b(include|include_once|require|require_once)\s*\(?\s*.*\$_(GET|POST|REQUEST)\b'
+    extensions: [".php"]
+    why: >
+      An attacker-controlled include path allows local file inclusion (LFI),
+      often escalating to remote code execution (e.g. via log poisoning or
+      wrapper schemes like php://filter).
+    fix: >
+      Never build an include/require path from request input. Use a fixed
+      allow-list mapping request values to specific files.
+    references:
+      - https://owasp.org/www-community/vulnerabilities/PHP_File_Inclusion

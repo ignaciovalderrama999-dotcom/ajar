@@ -1,0 +1,62 @@
+# NoSQL injection rules (MongoDB and similar document databases).
+#
+# MongoDB queries are JSON/objects, not SQL strings, so classic SQL-injection
+# defenses don't apply. The two real-world footguns are: (1) letting request
+# input become a query OPERATOR (e.g. { $ne: null }) instead of a plain value,
+# and (2) building a $where clause that evaluates JavaScript from a string.
+rules:
+  - id: NOSQL_WHERE_INJECTION
+    name: MongoDB $where clause built from a string
+    severity: critical
+    category: injection
+    message: A MongoDB $where clause executes a JavaScript string server-side.
+    pattern: '(?i)\$where\s*:\s*(["`]|function)'
+    why: >
+      $where runs arbitrary JavaScript inside the database server for every
+      document. If any part of that string comes from user input, it is
+      server-side JavaScript injection — full query bypass or worse.
+    fix: >
+      Remove $where. Express the condition with normal query operators
+      ($eq, $gt, $in, ...) instead of a JavaScript string.
+    references:
+      - https://owasp.org/www-community/attacks/Injection_theory
+      - https://cwe.mitre.org/data/definitions/94.html
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".py"]
+
+  - id: NOSQL_OPERATOR_INJECTION
+    name: Request body/params passed directly into a MongoDB query
+    severity: high
+    category: injection
+    message: A Mongo query filter is built directly from request input.
+    pattern: '(?i)\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|count|countDocuments)\s*\(\s*(req\.(body|query|params)|request\.(body|query|params))\b'
+    why: >
+      Passing the raw request body/query as the filter lets an attacker send
+      an object like {"password": {"$ne": null}} instead of a string, turning
+      a simple lookup into an authentication or filter bypass (NoSQL operator
+      injection).
+    fix: >
+      Build the filter explicitly from validated, expected fields (e.g.
+      { email: String(req.body.email) }) instead of passing the request object
+      straight through. Reject keys starting with "$" in user input, or use a
+      schema validator (zod/joi) that strips them.
+    references:
+      - https://owasp.org/www-community/attacks/Injection_theory
+
+  - id: NOSQL_MONGOOSE_RAW_WHERE
+    name: Mongoose .where() built from a string
+    severity: high
+    category: injection
+    message: Mongoose .where()/$where is used with a dynamically built string.
+    # Only flag when the string looks like a JS expression (has a space, e.g.
+    # "price > 100") or a template literal with interpolation — NOT the safe
+    # chainable form .where("fieldname").gt(value), a bare field name.
+    pattern: '(?i)\.where\s*\(\s*(`[^`]*\$\{|"[^"]*\s[^"]*"|''[^'']*\s[^'']*'')'
+    why: >
+      Like a raw $where clause, this evaluates a JavaScript condition
+      server-side; interpolated user input in the string is code injection.
+    fix: >
+      Use Mongoose's chainable query builders (.where("field").equals(value))
+      with real values, never a JavaScript-expression string built from input.
+    references:
+      - https://cwe.mitre.org/data/definitions/94.html
+    extensions: [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"]

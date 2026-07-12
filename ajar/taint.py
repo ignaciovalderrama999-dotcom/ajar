@@ -15,6 +15,31 @@ from __future__ import annotations
 
 import re
 
+from .models import Rule, Severity
+
+# Built-in rule for taint analysis (data-flow, not a regex pattern): user input
+# tracked across variables into a dangerous sink.
+TAINT_RULE = Rule(
+    id="TAINT_USER_INPUT_TO_SINK",
+    name="User input flows into a dangerous operation",
+    severity=Severity.HIGH,
+    category="injection",
+    message="User input reaches a dangerous operation through a variable.",
+    pattern="",  # handled by the taint engine, not regex
+    why=(
+        "A value taken from the request is stored in a variable and later used "
+        "in a sensitive operation without visible sanitization — a real, "
+        "exploitable injection path that single-line pattern rules cannot see."
+    ),
+    fix=(
+        "Sanitize or parameterize the value at the sink: parameterized queries "
+        "for SQL, argument lists (no shell) for commands, escaping/DOMPurify for "
+        "HTML, allow-listing for file paths and outbound URLs."
+    ),
+    references=("https://owasp.org/Top10/A03_2021-Injection/",),
+    context="any",
+)
+
 # `name = <expr>`  (optionally with const/let/var/val)
 _ASSIGN_RE = re.compile(r"^\s*(?:const|let|var|final|val)?\s*([A-Za-z_$][\w$]*)\s*=\s*(.+)$")
 
@@ -24,8 +49,9 @@ _ASSIGN_RE = re.compile(r"^\s*(?:const|let|var|final|val)?\s*([A-Za-z_$][\w$]*)\
 # request source) is not mistaken for tainted input.
 _SOURCE_RE = re.compile(
     r"(?i)(request\.|req\.|\.args\b|\.query\b|\.params\b|\.body\b|\.searchParams\b"
-    r"|\binput\s*\(|sys\.argv|process\.argv|request\.form|get_json|request\.data"
-    r"|params\[|formData\.get)"
+    r"|(req|request)\.(headers|cookies)\b|\binput\s*\(|sys\.argv|process\.argv"
+    r"|request\.form|get_json|request\.data|params\[|formData\.get"
+    r"|\$_(GET|POST|REQUEST|COOKIE)\b|\bgetParameter\s*\(|\bgetHeader\s*\()"
 )
 
 # functions that neutralize user input — if the value passes through one of
@@ -39,7 +65,7 @@ _SANITIZER_RE = re.compile(
 # dangerous sinks: (regex, human label)
 _SINKS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)\b(execute|executemany|executescript|raw)\s*\("), "a SQL query (SQL injection)"),
-    (re.compile(r"(?i)\.query\s*\("), "a SQL query (SQL injection)"),
+    (re.compile(r"(?i)(\.|->)query\s*\("), "a SQL query (SQL injection)"),
     (re.compile(r"(?i)(^|[^.\w])(eval|exec)\s*\("), "dynamic code execution (RCE)"),
     (re.compile(r"(?i)new\s+Function\s*\("), "dynamic code execution (RCE)"),
     (re.compile(r"(?i)os\.system\s*\("), "a shell command (command injection)"),
@@ -49,7 +75,13 @@ _SINKS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)\bopen\s*\("), "a file path (path traversal)"),
     (re.compile(r"(?i)pickle\.loads?\s*\("), "deserialization (RCE)"),
     (re.compile(r"(?i)(fetch|requests\.\w+|urlopen)\s*\("), "an outbound request (SSRF)"),
+    (re.compile(r"(?i)\b(res|response)\.(send|write|end)\s*\("), "an HTTP response (reflected XSS)"),
+    (re.compile(r"(?i)\bredirect\s*\("), "a redirect (open redirect)"),
 ]
+
+# Sinks whose same-origin literal ("/path...") is not the dangerous case: an
+# outbound request or a redirect to a fixed relative path has a fixed host.
+_SAME_ORIGIN_SAFE_LABELS = ("an outbound request", "a redirect")
 
 # A literal same-origin path right at the call, e.g. fetch("/api/x"...): the
 # host is fixed, so tainted query params appended after it are not SSRF.
@@ -57,7 +89,11 @@ _SAME_ORIGIN_RE = re.compile(r"""^\s*['"`]/""")
 
 
 def _word_in(name: str, text: str) -> bool:
-    return re.search(r"\b" + re.escape(name) + r"\b", text) is not None
+    # Treat `$` as part of an identifier so PHP variables ($id) match at their
+    # real boundaries — a plain \b fails against the leading `$`.
+    return (
+        re.search(r"(?<![\w$])" + re.escape(name) + r"(?![\w$])", text) is not None
+    )
 
 
 def find_taint_flows(lines: list[str]):

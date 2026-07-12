@@ -246,3 +246,109 @@ def test_skips_binary_and_vendor_dirs(tmp_path, rules):
     paths = {Path(x.path).name for x in findings}
     assert "x.js" not in paths
     assert "real.py" in paths
+
+
+def test_csharp_detects_injection(tmp_path, rules):
+    f = tmp_path / "X.cs"
+    f.write_text(
+        "class X {\n"
+        "  void F(string id) {\n"
+        "    // new SqlCommand(\"...\" + id) in a comment must NOT flag\n"
+        "    var cmd = new SqlCommand(\"SELECT * FROM u WHERE id=\" + id);\n"
+        "    var bf = new BinaryFormatter();\n"
+        "  }\n"
+        "}\n"
+    )
+    ids = {x.rule.id for x in scan_path(f, rules)}
+    assert "SQLI_CSHARP" in ids
+    assert "DESERIAL_CSHARP_BINARYFORMATTER" in ids
+
+
+def test_csharp_parameterized_is_clean(tmp_path, rules):
+    f = tmp_path / "X.cs"
+    f.write_text(
+        "class X {\n"
+        "  void F(string id) {\n"
+        "    var cmd = new SqlCommand(\"SELECT * FROM u WHERE id=@id\");\n"
+        "    cmd.Parameters.AddWithValue(\"@id\", id);\n"
+        "  }\n"
+        "}\n"
+    )
+    assert not any(x.rule.id == "SQLI_CSHARP" for x in scan_path(f, rules))
+
+
+def test_samesite_none_flagged_lax_clean(tmp_path, rules):
+    bad = tmp_path / "bad.js"
+    bad.write_text('res.cookie("sid", v, { sameSite: "none", secure: true });\n')
+    assert any(x.rule.id == "CSRF_SAMESITE_NONE" for x in scan_path(bad, rules))
+    good = tmp_path / "good.js"
+    good.write_text('res.cookie("sid", v, { sameSite: "lax" });\n')
+    assert not any(x.rule.id == "CSRF_SAMESITE_NONE" for x in scan_path(good, rules))
+
+
+def test_cors_reflects_origin_flagged_static_clean(tmp_path, rules):
+    bad = tmp_path / "bad.js"
+    bad.write_text('res.setHeader("Access-Control-Allow-Origin", req.headers.origin);\n')
+    assert any(x.rule.id == "CORS_REFLECTS_ORIGIN" for x in scan_path(bad, rules))
+    good = tmp_path / "good.js"
+    good.write_text('res.setHeader("Access-Control-Allow-Origin", "https://app.example.com");\n')
+    assert not any(x.rule.id == "CORS_REFLECTS_ORIGIN" for x in scan_path(good, rules))
+
+
+def test_cors_credentials_wildcard_flagged(tmp_path, rules):
+    bad = tmp_path / "bad.js"
+    bad.write_text('app.use(cors({ origin: "*", credentials: true }));\n')
+    assert any(x.rule.id == "CORS_CREDENTIALS_WILDCARD" for x in scan_path(bad, rules))
+    good = tmp_path / "good.js"
+    good.write_text('app.use(cors({ origin: "https://app.example.com", credentials: true }));\n')
+    assert not any(x.rule.id == "CORS_CREDENTIALS_WILDCARD" for x in scan_path(good, rules))
+
+
+def test_taint_reflected_xss_and_open_redirect(tmp_path, rules):
+    xss = tmp_path / "xss.js"
+    xss.write_text(
+        'app.get("/", (req, res) => {\n'
+        "  const n = req.query.name;\n"
+        "  res.send(n);\n"
+        "});\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(xss, rules))
+
+    red = tmp_path / "red.js"
+    red.write_text(
+        'app.get("/r", (req, res) => {\n'
+        "  const u = req.query.url;\n"
+        "  res.redirect(u);\n"
+        "});\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(red, rules))
+
+
+def test_taint_redirect_to_fixed_path_is_clean(tmp_path, rules):
+    f = tmp_path / "red.js"
+    f.write_text(
+        'app.get("/r", (req, res) => {\n'
+        "  const u = req.query.url;\n"
+        '  res.redirect("/home");\n'
+        "});\n"
+    )
+    assert not any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
+
+
+def test_taint_header_and_cookie_sources(tmp_path, rules):
+    py = tmp_path / "h.py"
+    py.write_text(
+        "def h():\n"
+        '    ua = request.headers.get("X")\n'
+        "    cursor.execute(ua)\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(py, rules))
+
+    php = tmp_path / "h.php"
+    php.write_text(
+        "<?php\n"
+        '$u = $_COOKIE["id"];\n'
+        "$out = build($u);\n"
+        "$db->query($out);\n"
+    )
+    assert any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(php, rules))

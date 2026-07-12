@@ -6,7 +6,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-07-12
+
 ### Added
+- **Four more languages** with the full structural engine: **Go, Java, PHP and
+  C#** — bringing supported languages to **8** (Python, JavaScript, TypeScript,
+  TSX, Go, Java, PHP, C#). New injection/deserialization/XXE rules per language.
+- **Host security audit** (`ajar host`): read-only, local-only inspection of the
+  machine's **own** listening ports, exposed databases/dev servers, and firewall
+  state. It never opens a network connection and cannot be pointed at another
+  machine. Requires `pip install ajar-scanner[host]` (psutil).
+- **CSRF / cross-origin rules**: `CSRF_SAMESITE_NONE` (cookie set with
+  `SameSite=None`), `CORS_REFLECTS_ORIGIN` (echoing the request Origin back), and
+  `CORS_CREDENTIALS_WILDCARD` (`credentials: true` with a wildcard origin).
+- **NoSQL injection rules**: `$where` injection, operator injection from request
+  bodies, and raw Mongoose `.where()` expressions.
+- **New secret patterns**: Twilio, SendGrid, npm, Discord bot, and Square tokens.
+
+### Changed
+- **Taint analysis reaches further.** New sources (request headers/cookies,
+  PHP `$_GET`/`$_POST`/`$_REQUEST`/`$_COOKIE`, Java `getParameter`/`getHeader`)
+  and new sinks (reflected XSS via `res.send`/`write`/`end`, open redirect via
+  `redirect(...)`, and SQL `->query(...)` for PHP/mysqli). Variable boundary
+  matching now understands `$`-prefixed PHP variables. Same-origin literals are
+  still excluded from SSRF/redirect flows to avoid false positives.
+
+### Legal / safety
+- Documentation hardened for **defensive, local-only** use across README,
+  DISCLAIMER, SECURITY, and ACCEPTABLE_USE: ajar only reads and reports, never
+  modifies system state, and never contacts a remote host. The included skill now
+  instructs assistants to **guide** the user on host findings (ports/services/
+  firewall) rather than change the system themselves.
+
+### Added (earlier, now shipping in 0.1.8)
 - **Entropy-based secret detection** (`SECRET_HIGH_ENTROPY`): catches random,
   high-entropy strings that match no known vendor pattern — an independent
   implementation of the Shannon-entropy technique, tuned to ignore prose, paths,

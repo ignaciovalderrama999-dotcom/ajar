@@ -261,16 +261,20 @@ from comments and strings: `code` ignores comments **and** strings (most rules),
 
 ## Ethics: analyze and protect, never attack 🛡️
 
-ajar is a **defensive** tool, on purpose. It **points at risk and explains the
-fix** — it never generates exploits, payloads, or offensive tooling, and it
-never connects to or probes any remote system. Its whole job is to help you
-close doors before someone else finds them open. That principle is not up for
-negotiation, and it guides every rule we add.
+ajar is a **defensive, local-only** tool, on purpose. It **points at risk and
+explains the fix** — it never generates exploits, payloads, or offensive tooling,
+and it **never opens a network connection to scan anything**: code analysis reads
+local files, and the host audit (`ajar host`) only inspects the local machine's
+own listening ports and firewall state, never another host. It protects by
+closing doors *before* someone finds them open (prevention) — it is **not** an
+antivirus and does not detect malware or intrusions. That principle is not up
+for negotiation, and it guides every rule we add.
 
 ## Legal & responsible use ⚖️
 
-- **Use it only on code you own or are authorized to review.** See the full
-  [Acceptable Use Policy](ACCEPTABLE_USE.md).
+- **Use it only on code, or a local machine, you own or are authorized to
+  review.** `ajar host` audits **only the machine you run it on** — never scan
+  another host. See the full [Acceptable Use Policy](ACCEPTABLE_USE.md).
 - **It is an aid, not a guarantee.** A clean scan does not mean your app is
   secure. See the [Disclaimer & Limitation of Liability](DISCLAIMER.md).
 - **Provided "AS IS", no warranty, no liability** — standard [Apache 2.0](LICENSE)
@@ -304,6 +308,18 @@ Inline `# ajar:ignore`, a `disable:` list in `.ajar.yml`, or a `--baseline`.
 **Can I use it to attack a site?**
 No. ajar analyzes local source and never touches remote systems or generates
 exploits. It is defensive by design — see [ACCEPTABLE_USE.md](ACCEPTABLE_USE.md).
+
+**Does `ajar host` scan my network or other machines?**
+No — it inspects **only the machine you run it on** (its own listening ports and
+firewall), reading local state via the OS. It never connects to a port and
+cannot be pointed at another host. Scanning machines you don't own is not what
+it's for and is against the [Acceptable Use Policy](ACCEPTABLE_USE.md).
+
+**Is ajar an antivirus? Does it tell me if I've been hacked?**
+No. ajar is **preventive**: it helps you close doors (exposed services, insecure
+config) *before* someone gets in. It does **not** detect malware, spyware, or an
+active intrusion. If you need that, use an antivirus/EDR (e.g. Microsoft
+Defender, Malwarebytes) — a different, complementary kind of tool.
 
 ## Roadmap
 

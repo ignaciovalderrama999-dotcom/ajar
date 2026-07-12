@@ -11,8 +11,33 @@ from __future__ import annotations
 import math
 import re
 
+from .models import Rule, Severity
+
 # quoted string literals between 20 and 120 chars (secrets live in that range)
 _STRING_RE = re.compile(r"""(['"])([^'"\n\\]{20,120})\1""")
+
+# Built-in rule for entropy-based detection (not a YAML regex rule, since it
+# needs to measure randomness rather than match a pattern).
+ENTROPY_RULE = Rule(
+    id="SECRET_HIGH_ENTROPY",
+    name="High-entropy string (possible hardcoded secret)",
+    severity=Severity.MEDIUM,
+    category="secrets",
+    message="A random-looking string may be a hardcoded secret or token.",
+    pattern="",  # handled by the entropy engine, not regex
+    why=(
+        "Random, high-entropy strings in source are often API keys, tokens, or "
+        "passwords that match no known vendor pattern — so pattern scanners miss "
+        "them, but attackers scraping repos do not."
+    ),
+    fix=(
+        "If this is a secret, move it to an environment variable or a secrets "
+        "manager and rotate it. If it is not a secret (a hash, an id), silence it "
+        "with a trailing  # ajar:ignore SECRET_HIGH_ENTROPY  comment."
+    ),
+    references=("https://cwe.mitre.org/data/definitions/798.html",),
+    context="any",
+)
 
 # a file path/asset reference: has a path separator and ends in a short
 # extension, e.g. "/components/cart_DASHBOARD_V10.html" or "./assets/logo.png".

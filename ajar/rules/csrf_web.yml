@@ -1,0 +1,63 @@
+# CSRF and cross-origin rules — the higher-signal cases that the basic
+# "CSRF disabled" / "wildcard CORS" rules do not cover.
+rules:
+  - id: CSRF_SAMESITE_NONE
+    name: Cookie set with SameSite=None
+    severity: medium
+    category: crypto-auth
+    message: A cookie is configured with SameSite=None, allowing it on cross-site requests.
+    pattern: '(?i)sameSite\s*[:=]\s*["'']?none\b'
+    extensions: [".js", ".ts", ".tsx", ".jsx", ".py", ".php", ".java", ".go", ".cs"]
+    context: any
+    why: >
+      SameSite=None makes the cookie travel on cross-site requests, which removes
+      the browser's built-in CSRF protection for that cookie. If it is a session
+      or auth cookie and the app has no anti-CSRF token, a malicious site can
+      drive state-changing requests as the logged-in victim.
+    fix: >
+      Use SameSite=Lax (or Strict) for session/auth cookies unless you truly need
+      cross-site sending. If you must use SameSite=None, it MUST also be Secure and
+      the state-changing endpoints must be protected by a per-request CSRF token.
+    references:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+      - https://owasp.org/www-community/attacks/csrf
+
+  - id: CORS_REFLECTS_ORIGIN
+    name: CORS reflects the request Origin
+    severity: high
+    category: insecure-defaults
+    message: Access-Control-Allow-Origin is set from the incoming request's Origin.
+    pattern: '(?i)access-control-allow-origin["'']?\s*[,:)]\s*[^,\n]*\b(req(uest)?\.(headers|get)|origin)\b'
+    extensions: [".js", ".ts", ".tsx", ".jsx", ".py", ".php", ".java", ".go", ".cs"]
+    context: any
+    why: >
+      Echoing the request's Origin back in Access-Control-Allow-Origin is
+      effectively a wildcard that ALSO works with credentials — any site can read
+      authenticated responses from your API on behalf of the logged-in user. This
+      is worse than a static "*", which browsers refuse to combine with cookies.
+    fix: >
+      Validate the Origin against an explicit allow-list of trusted origins and
+      only echo it back if it matches. Never reflect an arbitrary Origin, and only
+      set Access-Control-Allow-Credentials=true for known, trusted origins.
+    references:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS
+      - https://portswigger.net/web-security/cors
+
+  - id: CORS_CREDENTIALS_WILDCARD
+    name: CORS allows credentials with a wildcard origin
+    severity: high
+    category: insecure-defaults
+    message: Access-Control-Allow-Credentials is true together with a wildcard/any origin.
+    pattern: '(?i)(origin\s*:\s*["'']?\*["'']?\s*,[^}\n]*credentials\s*:\s*true|credentials\s*:\s*true\s*,[^}\n]*origin\s*:\s*["'']?\*)'
+    extensions: [".js", ".ts", ".tsx", ".jsx", ".py", ".php", ".java", ".go", ".cs"]
+    context: any
+    why: >
+      Allowing credentials (cookies, auth headers) on cross-origin requests means
+      any allowed origin can read authenticated responses. Combined with a broad
+      or reflected origin, this exposes every logged-in user's data to other sites.
+    fix: >
+      Only enable credentialed CORS for a small, explicit allow-list of trusted
+      origins. Never combine Access-Control-Allow-Credentials=true with a wildcard
+      or a reflected origin.
+    references:
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials
