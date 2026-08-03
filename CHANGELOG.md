@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-03
+
+### Fixed
+- **`XSS_DANGEROUS_HTML` no longer fires on static `dangerouslySetInnerHTML`.**
+  The old rule flagged the mere presence of `dangerouslySetInnerHTML`. It now
+  inspects the `__html` value and only flags a **dynamic** one — a variable,
+  a template interpolation (`${...}`), or string concatenation. A hardcoded
+  string/template literal, or a `JSON.stringify()` of a purely literal
+  object/array, is recognized as safe and is not flagged. (Reported from a real
+  Next.js project where static JSON-LD / inline scripts were false positives.)
+
 ## [0.1.9] - 2026-08-03
 
 ### Added

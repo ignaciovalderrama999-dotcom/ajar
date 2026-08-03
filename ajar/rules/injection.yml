@@ -135,18 +135,23 @@ rules:
       - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
   - id: XSS_DANGEROUS_HTML
-    name: React dangerouslySetInnerHTML
+    name: React dangerouslySetInnerHTML with dynamic content
     severity: medium
     category: injection
-    message: dangerouslySetInnerHTML injects raw HTML into the DOM.
-    pattern: 'dangerouslySetInnerHTML'
+    message: dangerouslySetInnerHTML is fed a dynamic value (variable, interpolation, or concatenation).
+    pattern: '(?i)__html\s*:\s*(`[^`]*\$\{|["''`][^"''`]*["''`]\s*\+|(?!JSON\.stringify\s*\(\s*[\[{''"`\d])[A-Za-z_$])'
     extensions: [".js", ".ts", ".jsx", ".tsx"]
+    context: code
     why: >
-      This bypasses React''s built-in escaping. Unsanitized user content here
-      becomes stored or reflected XSS.
+      dangerouslySetInnerHTML bypasses React''s built-in escaping. A **dynamic**
+      value — a variable, a template interpolation (${...}), or string
+      concatenation — can carry unsanitized user content and become stored or
+      reflected XSS. A hardcoded string literal, or a JSON.stringify() of a purely
+      literal object/array, is safe and is deliberately NOT flagged.
     fix: >
-      Render as text where possible, or sanitize with DOMPurify before passing
-      the HTML in.
+      Render as text where possible, or sanitize the value with DOMPurify before
+      passing it in. If the HTML is a fixed constant with no user input, it is
+      safe to leave.
     references:
       - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 

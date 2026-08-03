@@ -356,6 +356,40 @@ def test_email_html_injection_flagged_and_static_clean(tmp_path, rules):
     assert not any(x.rule.id == "HTMLI_EMAIL_TEMPLATE" for x in scan_path(good, rules))
 
 
+def test_dangerous_html_ignores_static_flags_dynamic(tmp_path, rules):
+    # Static, developer-written literal: NOT a false positive anymore.
+    static = tmp_path / "Static.tsx"
+    static.write_text(
+        "<script dangerouslySetInnerHTML={{\n"
+        "  __html: `console.log('hi'); document.title = 'X';`\n"
+        "}} />\n"
+    )
+    assert not any(x.rule.id == "XSS_DANGEROUS_HTML" for x in scan_path(static, rules))
+
+    # JSON.stringify of a purely literal object/array: also safe, not flagged.
+    jsonlit = tmp_path / "Json.tsx"
+    jsonlit.write_text(
+        "<script dangerouslySetInnerHTML={{\n"
+        "  __html: JSON.stringify({ name: 'Juan', url: 'https://ex.com' })\n"
+        "}} />\n"
+    )
+    assert not any(x.rule.id == "XSS_DANGEROUS_HTML" for x in scan_path(jsonlit, rules))
+
+    # Dynamic value (variable / interpolation / concat / stringify of req.body):
+    # still flagged.
+    for code in (
+        "<div dangerouslySetInnerHTML={{ __html: userHtml }} />\n",
+        "<div dangerouslySetInnerHTML={{ __html: `<p>${x}</p>` }} />\n",
+        '<div dangerouslySetInnerHTML={{ __html: "<b>" + x }} />\n',
+        "<script dangerouslySetInnerHTML={{ __html: `d = ${JSON.stringify(req.body)}` }} />\n",
+    ):
+        f = tmp_path / "Dyn.tsx"
+        f.write_text(code)
+        assert any(
+            x.rule.id == "XSS_DANGEROUS_HTML" for x in scan_path(f, rules)
+        ), code
+
+
 def test_out_dir_excluded_by_default(tmp_path, rules):
     (tmp_path / "out").mkdir()
     (tmp_path / "out" / "app.js").write_text("const q = `SELECT * FROM u WHERE id=${id}`;\n")
