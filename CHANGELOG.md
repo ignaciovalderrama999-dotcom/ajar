@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-03
+
+### Fixed — precision (validated on OWASP Juice Shop)
+Benchmarked against the OWASP Juice Shop source (locally, read-only): total
+findings dropped from **373 to 155** while every real vulnerability was kept
+(NoSQL injection, insecure deserialization, SQLi, taint flows). The cut was pure
+noise:
+
+- **Heuristic secret detectors are suppressed in test/fixture files.** Generic
+  `password = "…"` assignments and entropy no longer fire in `test/`, `spec/`,
+  `e2e/`, `cypress/`, `fixtures/`, `__mocks__/`, `*.test.*`, `*.spec.*` — where
+  fake credentials are the norm. Specific vendor-key patterns (AWS/Stripe/…) are
+  **kept**, since a real key is a leak even in a test.
+- **`XSS_INNERHTML` now flags only dynamic content**, mirroring the
+  `dangerouslySetInnerHTML` fix: `el.innerHTML = "Loading…"` (a static literal)
+  is no longer a false positive; `el.innerHTML = userInput` still is.
+- **Entropy ignores alphabet/charset constants** — a string like
+  `"ABC…XYZabc…xyz012…9"` has maximal entropy but is obviously not a secret
+  (detected via a long ascending character run).
+- **`FAILOPEN_AUTH_ENV_BYPASS` no longer matches UI state flags** — a variable
+  that merely contains "auth" (e.g. `oauthUnavailable = false`) is not an
+  authentication switch. The rule now matches meaningful auth-enforcement names.
+- **Localization data is skipped**: `i18n`, `locales`, `locale`, `translations`,
+  `lang` directories are strings for humans, a big entropy false-positive source
+  and never where bugs live.
+
 ## [0.2.1] - 2026-08-03
 
 ### Changed

@@ -390,6 +390,63 @@ def test_dangerous_html_ignores_static_flags_dynamic(tmp_path, rules):
         ), code
 
 
+def test_innerhtml_ignores_static_flags_dynamic(tmp_path, rules):
+    static = tmp_path / "s.js"
+    static.write_text('el.innerHTML = "Loading ...";\nx.innerHTML = "";\n')
+    assert not any(x.rule.id == "XSS_INNERHTML" for x in scan_path(static, rules))
+    for code in ("el.innerHTML = message;\n", 'el.innerHTML = "<b>" + x;\n'):
+        f = tmp_path / "d.js"
+        f.write_text(code)
+        assert any(x.rule.id == "XSS_INNERHTML" for x in scan_path(f, rules)), code
+
+
+def test_entropy_ignores_charset_constant(tmp_path, rules):
+    # A charset/alphabet string has maximal entropy but is not a secret.
+    f = tmp_path / "gen.ts"
+    f.write_text(
+        "const possible = "
+        "'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';\n"
+    )
+    assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
+def test_failopen_ignores_ui_flag(tmp_path, rules):
+    # A UI state flag that merely contains "auth" must not read as auth-disable.
+    f = tmp_path / "login.ts"
+    f.write_text("this.oauthUnavailable = false;\nauthModalOpen = false;\n")
+    assert not any(x.rule.id == "FAILOPEN_AUTH_ENV_BYPASS" for x in scan_path(f, rules))
+
+
+def test_test_files_suppress_heuristic_secrets_keep_vendor(tmp_path, rules):
+    # Fake creds in a test dir: generic + entropy suppressed, real AWS key kept.
+    (tmp_path / "test").mkdir()
+    t = tmp_path / "test" / "login.spec.ts"
+    t.write_text(
+        'const password = "hunter2demo";\n'
+        'const blob = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8";\n'
+        'const aws = "AKIAIOSFODNN7EXAMPLE";\n'
+    )
+    ids = {x.rule.id for x in scan_path(tmp_path, rules)}
+    assert "SECRET_GENERIC_ASSIGNMENT" not in ids
+    assert "SECRET_HIGH_ENTROPY" not in ids
+    assert "SECRET_AWS_ACCESS_KEY" in ids  # real vendor key still caught
+
+    # Same content in NON-test code: heuristic detectors DO fire.
+    src = tmp_path / "app.ts"
+    src.write_text('const blob = "aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8";\n')
+    assert any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(src, rules))
+
+
+def test_i18n_dir_excluded(tmp_path, rules):
+    (tmp_path / "i18n").mkdir()
+    (tmp_path / "i18n" / "en.json").write_text('{"msg": "AKIAIOSFODNN7EXAMPLE looking text"}\n')
+    real = tmp_path / "real.py"
+    real.write_text("DEBUG = True\n")
+    paths = {Path(x.path).name for x in scan_path(tmp_path, rules)}
+    assert "en.json" not in paths
+    assert "real.py" in paths
+
+
 def test_out_dir_excluded_by_default(tmp_path, rules):
     (tmp_path / "out").mkdir()
     (tmp_path / "out" / "app.js").write_text("const q = `SELECT * FROM u WHERE id=${id}`;\n")

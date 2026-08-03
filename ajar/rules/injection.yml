@@ -117,12 +117,13 @@ rules:
 
   # ---------------------------------------------------------------- XSS
   - id: XSS_INNERHTML
-    name: Unescaped assignment to innerHTML
+    name: Dynamic assignment to innerHTML/outerHTML
     severity: high
     category: injection
-    message: Content is assigned to innerHTML/outerHTML.
-    pattern: '(?i)\.(inner|outer)HTML\s*='
+    message: A dynamic value (variable/interpolation/concatenation) is assigned to innerHTML/outerHTML.
+    pattern: '(?i)\.(inner|outer)HTML\s*=\s*(`[^`]*\$\{|["''`][^"''`]*["''`]\s*\+|(?!JSON\.stringify\s*\(\s*[\[{''"`\d])[A-Za-z_$])'
     extensions: [".js", ".ts", ".jsx", ".tsx", ".html"]
+    context: code
     why: >
       Writing user data into innerHTML executes any <script> or event handler it
       contains — cross-site scripting (XSS), which can steal sessions and act as

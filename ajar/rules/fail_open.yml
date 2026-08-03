@@ -9,7 +9,7 @@ rules:
     severity: critical
     category: fail-open
     message: Authentication is switched off based on an environment name.
-    pattern: '(?i)(auth\w*|require_auth|login_required|authentication)\s*=\s*(False|0|"false")'
+    pattern: '(?i)\b(auth|require[_-]?auth|auth[_-]?required|auth[_-]?enabled|auth[_-]?enforced|auth[_-]?guard|auth[_-]?check|check[_-]?auth|authentication|login[_-]?required|require[_-]?login)\b\s*=\s*(false|0|[''"]false[''"])'
     why: >
       If the environment variable that flips this is missing or misspelled in
       production, the app boots wide open with no authentication. Attackers do

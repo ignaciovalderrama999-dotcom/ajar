@@ -56,12 +56,33 @@ def shannon_entropy(value: str) -> float:
     return -sum((c / n) * math.log2(c / n) for c in counts.values())
 
 
+def _has_sequential_run(value: str, length: int = 8) -> bool:
+    """True if the string contains a long ascending character run.
+
+    Charset/alphabet constants like ``"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"``
+    have maximal Shannon entropy (every char unique) but are obviously not
+    secrets. A real random token almost never contains 8 consecutive ascending
+    characters.
+    """
+    run = 1
+    for i in range(1, len(value)):
+        if ord(value[i]) == ord(value[i - 1]) + 1:
+            run += 1
+            if run >= length:
+                return True
+        else:
+            run = 1
+    return False
+
+
 def _looks_like_token(value: str) -> bool:
     """Random credentials mix cases and digits; prose and paths do not."""
     if " " in value:
         return False  # prose, not a token
     if "/" in value and _PATH_RE.match(value):
         return False  # a file path / asset reference, not a secret
+    if _has_sequential_run(value):
+        return False  # an alphabet/charset constant, not a secret
     has_lower = any(c.islower() for c in value)
     has_upper = any(c.isupper() for c in value)
     has_digit = any(c.isdigit() for c in value)

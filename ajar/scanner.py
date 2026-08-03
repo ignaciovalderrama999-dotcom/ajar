@@ -25,6 +25,9 @@ SKIP_DIRS = {
     "dist", "build", "out", "coverage", ".tox", ".idea", ".vscode",
     "site-packages", ".next", ".nuxt", ".svelte-kit", ".output", ".cache",
     ".parcel-cache", ".turbo", ".angular", ".serverless", "target", "vendor",
+    # Translation/localization data: strings for humans, not code — a huge
+    # source of entropy/secret false positives and never a place bugs live.
+    "i18n", "locales", "locale", "translations", "lang", "langs",
 }
 
 # Only scan files that plausibly hold code or config.
@@ -97,6 +100,30 @@ def _iter_files(root: Path, excludes: tuple[str, ...] = ()) -> Iterator[Path]:
             yield path
 
 
+# Test / fixture files legitimately contain fake credentials, tokens, and seed
+# passwords — the #1 source of secret false positives. In these files we suppress
+# the two *heuristic* secret detectors (generic "password = ..." assignments and
+# entropy) but KEEP specific vendor-format keys (AWS/Stripe/…), which are almost
+# always a real leak even in a test.
+_TEST_PATH_SEGMENTS = {
+    "test", "tests", "spec", "specs", "e2e", "cypress", "__tests__",
+    "__mocks__", "mocks", "fixtures", "fixture", "testdata", "test-data",
+}
+_TEST_FILE_RE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$", re.IGNORECASE)
+
+
+def _is_test_file(path: Path) -> bool:
+    if _TEST_FILE_RE.search(path.name):
+        return True
+    return any(part.lower() in _TEST_PATH_SEGMENTS for part in path.parts)
+
+
+def _is_heuristic_secret(rule: Rule) -> bool:
+    """A low-confidence secret detector (generic assignment), as opposed to a
+    specific vendor key pattern."""
+    return rule.category == "secrets" and "GENERIC" in rule.id
+
+
 def _rule_applies(rule: Rule, path: Path) -> bool:
     if not rule.extensions:
         return True
@@ -161,12 +188,17 @@ def _scan_text(
     # Structural analysis (comment/string regions) when tree-sitter is available
     # for this language; otherwise None -> plain pattern scanning.
     regions = analyze(text, file_path.suffix)
+    # In test/fixture files, fake credentials are the norm — suppress the
+    # heuristic secret detectors there (but keep specific vendor-key patterns).
+    is_test = _is_test_file(file_path)
 
     for lineno, line in enumerate(text.splitlines(), start=1):
         suppressed = _ignored_rule_ids(line)
         line_has_secret = False
         for rule, pattern in compiled:
             if not _rule_applies(rule, file_path):
+                continue
+            if is_test and _is_heuristic_secret(rule):
                 continue
             if suppressed is not None and (not suppressed or rule.id in suppressed):
                 continue
@@ -197,8 +229,9 @@ def _scan_text(
 
         # Entropy-based secret detection. Only if no known-pattern secret already
         # matched this line (avoids double-reporting), the rule isn't suppressed,
-        # and the match is not inside a comment.
-        if line_has_secret:
+        # the match is not inside a comment, and this is not a test/fixture file
+        # (entropy is a heuristic detector, suppressed there like generic secrets).
+        if line_has_secret or is_test:
             continue
         if suppressed is not None and (not suppressed or ENTROPY_RULE.id in suppressed):
             continue
