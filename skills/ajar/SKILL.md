@@ -1,6 +1,6 @@
 ---
 name: ajar
-description: "Expert-level security audit skill. Reviews a codebase for real, exploitable vulnerabilities — SQL/NoSQL/command injection, XSS, SSRF, path traversal, insecure deserialization, SSTI, fail-open auth, insecure defaults, weak crypto, denial-of-service, and hardcoded/high-entropy secrets — across Python, JavaScript, TypeScript, TSX (React/Next.js), Go, Java, PHP and C#. It can also audit the LOCAL machine's own attack surface (`ajar host`: listening ports, exposed databases/dev servers, firewall). Runs the ajar scanner for a fast first pass, then applies a professional methodology to confirm exploitability, rule out false positives, and fix code issues correctly. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, AI-generated code, or their own machine, or asks 'is my code/machine safe?'. Defensive and local-only: it analyzes, protects and recommends — it never attacks, never scans other machines, and never modifies system state (ports/services/firewall) on its own."
+description: "Expert-level security audit skill. Reviews a codebase for real, exploitable vulnerabilities — SQL/NoSQL/command injection, XSS, SSRF, path traversal, insecure deserialization, SSTI, fail-open auth, insecure defaults, weak crypto, denial-of-service, and hardcoded/high-entropy secrets — across Python, JavaScript, TypeScript, TSX (React/Next.js), Go, Java, PHP and C#. It can also audit the LOCAL machine's own attack surface (`ajar host`: listening ports, exposed databases/dev servers, firewall). Runs the ajar scanner for a fast first pass, then applies a professional methodology to confirm exploitability, rule out false positives, and fix code issues correctly. Goes beyond patterns to reason about the bugs a scanner cannot see — broken access control, client-only protections not enforced server-side, config-vs-usage drift (dead CSP/CORS domains, unused env keys), error/info disclosure, and injection into non-DOM HTML sinks — and never declares an app 'secure', only reports what was and wasn't checked. Use when the user wants to secure, harden, audit, or security-review their project, web app, API, AI-generated code, or their own machine, or asks 'is my code/machine safe?'. Defensive and local-only: it analyzes, protects and recommends — it never attacks, never scans other machines, and never modifies system state (ports/services/firewall) on its own."
 allowed-tools: Bash Read Edit Grep Glob
 ---
 
@@ -49,6 +49,7 @@ Load the relevant reference before judging or fixing a finding:
 - [`references/injection.md`](references/injection.md) — SQL/command injection, XSS, SSRF, path traversal, deserialization, SSTI: how each is reached, exploited, and *correctly* fixed.
 - [`references/auth-and-secrets.md`](references/auth-and-secrets.md) — fail-open auth, broken access control / IDOR, JWT, sessions, secrets, weak crypto.
 - [`references/nextjs-web.md`](references/nextjs-web.md) — web & Next.js specifics: `NEXT_PUBLIC_` leaks, server actions, SSR data exposure, CORS, CSP, security headers, cookies.
+- [`references/logic-config-and-disclosure.md`](references/logic-config-and-disclosure.md) — the **cross-file & logic** classes a scanner can't see: client-only protections not enforced server-side (form→endpoint), config-vs-usage drift (dead CSP/CORS domains, unused env keys), error/info disclosure, and injection into non-DOM HTML sinks (email/PDF/templates). Read this whenever a scan comes back clean.
 
 ## Running the scanner
 
@@ -88,6 +89,15 @@ Guiding the user step by step is the job; silently modifying their system is not
 - **Never modify system state (ports, services, firewall).** Report and guide;
   the user acts. ajar analyzes and recommends — it does not reconfigure a
   machine.
+- **A clean scan is the start of the hunt, not the end.** When the scanner is
+  quiet, dig harder — that is when you work the logic and cross-file classes
+  (step 4 of the methodology): access control, client-only protections not
+  enforced server-side, config-vs-usage drift, error disclosure, non-DOM HTML
+  injection. The bugs that matter most are the ones no regex can reach.
+- **Never call an app "secure" or "safe."** You cannot prove the absence of bugs;
+  a false all-clear is the worst thing a review can produce. Report what you
+  found, what you checked, and — explicitly — what you did **not** check. "No
+  issues found at this depth" is the strongest honest claim.
 - **Honest.** A clean scan is not a guarantee. Business-logic and design flaws
   need a human. Say so.
 - **Minimal, correct fixes.** For *code* fixes, make the minimal correct change

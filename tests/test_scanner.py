@@ -335,6 +335,46 @@ def test_taint_redirect_to_fixed_path_is_clean(tmp_path, rules):
     assert not any(x.rule.id == "TAINT_USER_INPUT_TO_SINK" for x in scan_path(f, rules))
 
 
+def test_error_disclosure_flagged_and_safe_clean(tmp_path, rules):
+    bad = tmp_path / "route.ts"
+    bad.write_text("return res.status(500).json({ error: String(err) });\n")
+    assert any(x.rule.id == "ERROR_DISCLOSURE" for x in scan_path(bad, rules))
+    bad2 = tmp_path / "r2.ts"
+    bad2.write_text("res.send({ detail: err.message });\n")
+    assert any(x.rule.id == "ERROR_DISCLOSURE" for x in scan_path(bad2, rules))
+    good = tmp_path / "ok.ts"
+    good.write_text('res.status(400).json({ error: "Invalid input" });\n')
+    assert not any(x.rule.id == "ERROR_DISCLOSURE" for x in scan_path(good, rules))
+
+
+def test_email_html_injection_flagged_and_static_clean(tmp_path, rules):
+    bad = tmp_path / "contact.ts"
+    bad.write_text("await resend.emails.send({ html: `<p>${name}</p>` });\n")
+    assert any(x.rule.id == "HTMLI_EMAIL_TEMPLATE" for x in scan_path(bad, rules))
+    good = tmp_path / "ok.ts"
+    good.write_text('send({ html: "<p>hello</p>" });\n')
+    assert not any(x.rule.id == "HTMLI_EMAIL_TEMPLATE" for x in scan_path(good, rules))
+
+
+def test_out_dir_excluded_by_default(tmp_path, rules):
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "app.js").write_text("const q = `SELECT * FROM u WHERE id=${id}`;\n")
+    real = tmp_path / "real.ts"
+    real.write_text("DEBUG = True\n")
+    paths = {Path(x.path).name for x in scan_path(tmp_path, rules)}
+    assert "app.js" not in paths  # build output skipped
+
+
+def test_minified_file_skipped(tmp_path, rules):
+    # A minified bundle: one enormous line. Pattern rules must not fire on it.
+    mini = tmp_path / "vendor.js"
+    mini.write_text("var a=1;" + 'x="' + "SELECT * FROM u WHERE id=" + '"+b;' * 400 + "\n")
+    assert scan_path(mini, rules) == []
+    named = tmp_path / "app.min.js"
+    named.write_text('eval("' + "a" * 10 + '");\n')
+    assert scan_path(named, rules) == []
+
+
 def test_taint_header_and_cookie_sources(tmp_path, rules):
     py = tmp_path / "h.py"
     py.write_text(

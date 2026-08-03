@@ -1,0 +1,45 @@
+# Web classes a first pass can catch by pattern: leaking internal errors to the
+# client, and injecting unescaped input into a non-DOM HTML sink (email body).
+rules:
+  - id: ERROR_DISCLOSURE
+    name: Internal error or stack trace returned to the client
+    severity: medium
+    category: info-disclosure
+    message: An error object, message, or stack trace is sent in the HTTP response.
+    pattern: '(?i)(res|response|reply|ctx)\.(status\(\s*\d+\s*\)\.)?(send|json|end|write)\s*\([^)]*(String\s*\(\s*(err|error|e|ex|exception)\s*\)|\b(err|error|e|ex|exception)\.(stack|message)\b|:\s*(err|error|ex|exception)\s*[,}\)])'
+    extensions: [".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"]
+    context: code
+    why: >
+      Returning the raw error, its .message, or its .stack to the client leaks
+      internal details — file paths, library versions, SQL fragments, stack
+      frames — that help an attacker map and exploit the system. It is a real
+      information-disclosure bug even when nothing is "injected".
+    fix: >
+      Log the full error server-side (with a correlation id) and return a generic
+      message to the client, e.g. res.status(500).json({ error: "Internal error",
+      id }). Never send String(err), err.message, or err.stack to the response.
+    references:
+      - https://owasp.org/www-community/Improper_Error_Handling
+      - https://cwe.mitre.org/data/definitions/209.html
+
+  - id: HTMLI_EMAIL_TEMPLATE
+    name: Unescaped input built into an email/HTML body
+    severity: medium
+    category: injection
+    message: An `html:` field is built from an interpolated/concatenated string.
+    pattern: '(?i)\bhtml\s*:\s*(`[^`]*\$\{|["''][^"'']*["'']\s*\+|[A-Za-z_$][\w$]*\s*\+\s*[A-Za-z_$])'
+    extensions: [".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"]
+    context: code
+    why: >
+      The scanner's DOM XSS rules only see innerHTML/dangerouslySetInnerHTML. An
+      `html:` body sent to an email API (Resend, Nodemailer, SendGrid) is the same
+      class of bug — user input spliced into HTML without escaping — except the
+      "DOM" is the recipient's mail client. It enables HTML/style injection,
+      spoofed content, and tracking pixels in the delivered mail.
+    fix: >
+      Escape user-supplied values before interpolating them into any HTML body
+      (an HTML-escaping helper, or a templating engine with auto-escaping). Treat
+      an email `html:` field exactly like innerHTML.
+    references:
+      - https://owasp.org/www-community/attacks/xss/
+      - https://cwe.mitre.org/data/definitions/79.html

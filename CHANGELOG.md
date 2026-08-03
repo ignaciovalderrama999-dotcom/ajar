@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-03
+
+### Added
+- **Two rules for classes the scanner previously missed entirely** (found while
+  auditing a real Next.js portfolio):
+  - `ERROR_DISCLOSURE` — returning `String(err)`, `err.message`, `err.stack`, or
+    an exception object to the HTTP client (internal-detail leak).
+  - `HTMLI_EMAIL_TEMPLATE` — unescaped input built into an `html:` email body
+    (Resend/Nodemailer/SendGrid): the same class as `innerHTML` XSS, but the
+    "DOM" is the recipient's mail client.
+- **Skill: a whole new reference, `logic-config-and-disclosure.md`**, plus a
+  rewritten "hunt" step, teaching the audit to reliably find the bugs a scanner
+  can't: client-only protections not enforced server-side (form→endpoint),
+  config-vs-usage drift (dead CSP/CORS domains, unused `NEXT_PUBLIC_`/env keys),
+  error disclosure, and injection into non-DOM HTML sinks. The skill now treats a
+  clean scan as the *start* of the hunt and is forbidden from calling an app
+  "secure" — it reports what was and was not checked.
+
+### Fixed
+- **Build/output directories are excluded by default** (`out`, `coverage`,
+  `.nuxt`, `.svelte-kit`, `.output`, `.cache`, `.turbo`, and more, alongside the
+  existing `dist`/`build`/`.next`/`node_modules`). Scanning a stale `out/` build
+  no longer produces hundreds of false positives from bundled vendor code.
+- **Minified/bundled files are skipped** (by `.min.js`/`.bundle.js` name or a
+  tell-tale very-long line), killing false "critical" hits inside packed library
+  JavaScript.
+- `ajar/__init__.py` version was stuck at 0.1.7 (the report footer showed the
+  wrong version); versions are now consistent.
+
 ## [0.1.8] - 2026-07-12
 
 ### Added

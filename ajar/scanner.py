@@ -14,11 +14,16 @@ from .parsing import analyze
 from .rules import compile_rules
 from .taint import TAINT_RULE, find_taint_flows
 
-# Directories we never descend into — noise, not source.
+# Directories we never descend into — build output and tooling, not source.
+# Scanning a build/output dir (its bundled, minified vendor code) is the biggest
+# source of false positives, so these are excluded by default rather than
+# trusting the user to point at the right folder.
 SKIP_DIRS = {
-    ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
-    "env", ".mypy_cache", ".pytest_cache", "dist", "build", ".tox", ".idea",
-    ".vscode", "site-packages", ".next", "target", "vendor",
+    ".git", ".hg", ".svn", "node_modules", "bower_components", "__pycache__",
+    ".venv", "venv", "env", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "dist", "build", "out", "coverage", ".tox", ".idea", ".vscode",
+    "site-packages", ".next", ".nuxt", ".svelte-kit", ".output", ".cache",
+    ".parcel-cache", ".turbo", ".angular", ".serverless", "target", "vendor",
 }
 
 # Only scan files that plausibly hold code or config.
@@ -31,6 +36,21 @@ TEXT_EXTENSIONS = {
 TEXT_FILENAMES = {"Dockerfile", ".env", "Makefile"}
 
 MAX_FILE_BYTES = 2_000_000  # skip anything larger than ~2 MB
+
+# Minified / bundled files are machine-generated vendor code: a single line can
+# be tens of thousands of characters, and pattern rules fire constantly on the
+# packed syntax (the classic false "critical SQL injection" inside a library
+# bundle). Skip them by name or by the tell-tale very-long line.
+_MINIFIED_NAME_RE = re.compile(r"\.(min|bundle|chunk|vendor)\.(js|css|mjs|cjs)$", re.IGNORECASE)
+_MINIFIED_LINE_LEN = 2000
+
+
+def _looks_minified(name: str, text: str) -> bool:
+    if _MINIFIED_NAME_RE.search(name):
+        return True
+    # A newline scan is cheap and avoids building a huge splitlines() list.
+    longest = max((len(seg) for seg in text.split("\n")), default=0)
+    return longest > _MINIFIED_LINE_LEN
 
 # Inline suppression: put "ajar:ignore" (optionally "ajar:ignore RULE_ID")
 # on a line to silence findings on it.
@@ -107,6 +127,9 @@ def scan_path(
                 continue
             text = file_path.read_text(encoding="utf-8", errors="ignore")
         except (OSError, ValueError):
+            continue
+
+        if _looks_minified(file_path.name, text):
             continue
 
         findings.extend(_scan_text(file_path, text, compiled))
