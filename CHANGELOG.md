@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-03
+
+### Changed
+- **Honest wording for the project-level findings.** `UNUSED_ENV_KEY`,
+  `UNUSED_PUBLIC_ENV_KEY`, and `DEAD_CSP_DOMAIN` now report *"No static reference
+  was found in the scanned project"* rather than claiming the config is
+  definitely unused. Static analysis cannot prove absence of use — the value may
+  be accessed dynamically (`process.env[name]`), built at runtime
+  (`${SUBDOMAIN}.example.com`), loaded from a database, used only in CI/CD,
+  defined for another package of a monorepo, or referenced in a skipped file.
+  Each finding now lists these caveats and frames itself as a lead to verify, not
+  a verdict.
+
 ## [0.2.0] - 2026-08-03
 
 ### Added — project-aware, cross-file analysis

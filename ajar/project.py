@@ -31,23 +31,35 @@ _PUBLIC_PREFIXES = (
     "GATSBY_", "NUXT_PUBLIC_",
 )
 
+# A shared caveat: static analysis found no reference — it cannot *prove* the key
+# is unused. Legitimate reasons it may still be live are listed so the user
+# verifies before deleting.
+_ENV_CAVEAT = (
+    "No static reference to this key was found in the scanned project. That is a "
+    "strong hint it is dead configuration from a removed integration, but static "
+    "analysis cannot prove it: the key may be read dynamically "
+    "(process.env[name]), used only in CI/CD, defined for another package of a "
+    "monorepo, loaded indirectly, or referenced in a file the scanner skipped. "
+    "Treat this as a lead to verify, not a verdict."
+)
+
 UNUSED_ENV_KEY = Rule(
     id="UNUSED_ENV_KEY",
-    name="Environment variable defined but never used",
+    name="Environment variable with no static reference in the project",
     severity=Severity.LOW,
     category="insecure-defaults",
-    message="This .env key is not referenced anywhere in the code.",
+    message="No static reference to this .env key was found in the scanned project.",
     pattern="",
     why=(
-        "A key defined in .env but referenced nowhere is dead configuration — "
-        "usually left over from a removed integration. It is clutter that hides "
-        "which secrets are actually live, and if it was ever a real credential it "
-        "is still sitting in the file."
+        _ENV_CAVEAT + " Dead keys are clutter that hides which secrets are "
+        "actually live, and if this was ever a real credential it is still sitting "
+        "in the file."
     ),
     fix=(
-        "Remove the unused key from the .env file. If it was ever a real secret, "
-        "rotate it as well. If it is used dynamically (e.g. process.env[name]), "
-        "silence this with a trailing '# ajar:ignore' on the line."
+        "Confirm it is genuinely unused, then remove it from the .env file (and "
+        "rotate it if it was ever a real secret). If it is accessed dynamically or "
+        "from outside the scanned tree, silence this with a trailing "
+        "'# ajar:ignore' on the line."
     ),
     references=("https://cwe.mitre.org/data/definitions/1188.html",),
     context="any",
@@ -55,21 +67,21 @@ UNUSED_ENV_KEY = Rule(
 
 UNUSED_PUBLIC_ENV_KEY = Rule(
     id="UNUSED_PUBLIC_ENV_KEY",
-    name="Public (browser-exposed) environment variable never used",
+    name="Public (browser-exposed) env variable with no static reference",
     severity=Severity.MEDIUM,
     category="insecure-defaults",
-    message="This public env key ships to the browser but is used nowhere.",
+    message="No static reference to this browser-exposed env key was found in the project.",
     pattern="",
     why=(
         "NEXT_PUBLIC_/VITE_/REACT_APP_ (and similar) values are inlined into the "
-        "client bundle and shipped to every visitor's browser. A public key that "
-        "is referenced nowhere in the code is exposed to the world for no reason — "
-        "leftover attack surface from an abandoned integration."
+        "client bundle and shipped to every visitor's browser. " + _ENV_CAVEAT +
+        " If it really is unused, it is browser-exposed attack surface kept for no "
+        "reason."
     ),
     fix=(
-        "Remove the unused public key from the .env file, and rotate the "
-        "underlying credential if it was ever real. Never keep a browser-exposed "
-        "value you are not using."
+        "Verify it is genuinely unused, then remove it from the .env file and "
+        "rotate the underlying credential if it was ever real. If it is accessed "
+        "dynamically or outside the scanned tree, silence with '# ajar:ignore'."
     ),
     references=("https://cwe.mitre.org/data/definitions/1188.html",),
     context="any",
@@ -94,21 +106,23 @@ _DOMAIN_SKIP = {
 
 DEAD_CSP_DOMAIN = Rule(
     id="DEAD_CSP_DOMAIN",
-    name="CSP allow-lists a domain that the code never uses",
+    name="CSP domain with no static reference in the project",
     severity=Severity.LOW,
     category="insecure-defaults",
-    message="This domain is allowed by the CSP but referenced nowhere in the code.",
+    message="No static reference to this CSP domain was found in the scanned project.",
     pattern="",
     why=(
-        "A domain in the Content-Security-Policy that appears nowhere else in the "
-        "repository is dead policy — typically from an integration that was "
-        "removed. It needlessly widens what the browser is allowed to load and "
-        "signals that nobody is maintaining the policy against real usage."
+        "A Content-Security-Policy domain that appears nowhere else in the scanned "
+        "project is likely dead policy from a removed integration, needlessly "
+        "widening what the browser may load. But static analysis cannot prove it: "
+        "the domain may be built dynamically (e.g. `${SUBDOMAIN}.example.com`), "
+        "loaded from a database, used only in CI/CD, or referenced in a file the "
+        "scanner skipped. Treat this as a lead to verify, not a verdict."
     ),
     fix=(
-        "Remove the unused domain from the CSP. If the domain is only referenced "
-        "at runtime (e.g. built from an env var), silence this with a trailing "
-        "'# ajar:ignore' on the directive."
+        "Confirm the domain is genuinely unused, then remove it from the CSP. If "
+        "it is referenced only at runtime (built from a variable, loaded from a "
+        "DB), silence this with a trailing '# ajar:ignore' on the directive."
     ),
     references=(
         "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
