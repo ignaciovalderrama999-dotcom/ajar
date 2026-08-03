@@ -11,6 +11,7 @@ from pathlib import Path
 from .entropy import ENTROPY_RULE, find_high_entropy
 from .models import Finding, Rule
 from .parsing import analyze
+from .project import find_project_findings
 from .rules import compile_rules
 from .taint import TAINT_RULE, find_taint_flows
 
@@ -32,6 +33,9 @@ TEXT_EXTENSIONS = {
     ".cs", ".c", ".cpp", ".rs", ".sh", ".bash", ".yml", ".yaml", ".toml",
     ".ini", ".cfg", ".conf", ".env", ".json", ".tf", ".tfvars", ".xml",
     ".properties", ".gradle", ".dockerfile",
+    # Web asset files — where CSP domains and other usage actually live, so the
+    # cross-file config check can see them (and vulns can hide here too).
+    ".html", ".htm", ".vue", ".svelte", ".astro", ".css", ".scss", ".sass", ".less",
 }
 TEXT_FILENAMES = {"Dockerfile", ".env", "Makefile"}
 
@@ -85,7 +89,11 @@ def _iter_files(root: Path, excludes: tuple[str, ...] = ()) -> Iterator[Path]:
             continue
         if excludes and _is_excluded(path, excludes):
             continue
-        if path.name in TEXT_FILENAMES or path.suffix.lower() in TEXT_EXTENSIONS:
+        if (
+            path.name in TEXT_FILENAMES
+            or path.suffix.lower() in TEXT_EXTENSIONS
+            or path.name.startswith(".env")  # .env.local, .env.production, …
+        ):
             yield path
 
 
@@ -120,6 +128,8 @@ def scan_path(
 
     compiled = compile_rules(rules)
     findings: list[Finding] = []
+    # Collected for the cross-file, project-level pass (see ajar.project).
+    file_texts: dict[Path, str] = {}
 
     for file_path in _iter_files(root, excludes):
         try:
@@ -132,7 +142,11 @@ def scan_path(
         if _looks_minified(file_path.name, text):
             continue
 
+        file_texts[file_path] = text
         findings.extend(_scan_text(file_path, text, compiled))
+
+    # Project-level analysis needs the whole repo at once (config vs. real usage).
+    findings.extend(find_project_findings(file_texts))
 
     findings.sort(key=lambda f: (-f.rule.severity.rank, f.path, f.line))
     return findings

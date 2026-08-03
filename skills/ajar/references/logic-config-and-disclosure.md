@@ -49,8 +49,11 @@ config.
    them; rotate any that were ever real credentials. Flag `NEXT_PUBLIC_*`
    especially — those ship to the browser, so a stale one is needless exposure.
 
-**Why the scanner misses it:** it requires comparing *two data sets* (the config
-and the whole repo). A single-file regex can't cross-reference.
+**ajar now does part of this for you:** the scanner's project-level pass emits
+`UNUSED_ENV_KEY` / `UNUSED_PUBLIC_ENV_KEY` for `.env` keys used nowhere, and
+`DEAD_CSP_DOMAIN` for CSP domains referenced nowhere. Treat those as confirmed
+leads. You still hunt the cases it can't (dynamic `process.env[name]`, domains
+built at runtime, allow-lists in formats it doesn't parse).
 
 ---
 

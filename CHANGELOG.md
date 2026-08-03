@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-03
+
+### Added — project-aware, cross-file analysis
+ajar no longer looks only at one line (or one file) at a time. A new
+project-level pass holds the whole repository in view and cross-references
+declared configuration against real usage — the mechanical half of a cross-file
+audit that a line-by-line scanner (and a busy reviewer) miss, with no LLM in the
+loop:
+
+- **`UNUSED_ENV_KEY` / `UNUSED_PUBLIC_ENV_KEY`** — every key in `.env` /
+  `.env.local` (templates excluded) is grepped against the whole codebase; keys
+  referenced nowhere are flagged. Browser-exposed prefixes (`NEXT_PUBLIC_`,
+  `VITE_`, `REACT_APP_`, …) are raised to medium because a stale one ships to
+  every visitor. A key echoed only in `.env.example` does not count as used.
+- **`DEAD_CSP_DOMAIN`** — every domain allow-listed in a `Content-Security-Policy`
+  is grepped against the repo; a domain used nowhere in real code is flagged as
+  dead policy (leftover from a removed integration). `# ajar:ignore` on the
+  directive silences runtime-only domains.
+
+### Changed
+- Web asset files are now scanned: `.html`, `.htm`, `.vue`, `.svelte`, `.astro`,
+  `.css`, `.scss`, `.sass`, `.less`. This is where CSP domains and other real
+  usage live (so the cross-file check is accurate) and where vulns can hide.
+- `.env.local` / `.env.production` (not just a bare `.env`) are now discovered.
+
 ## [0.1.10] - 2026-08-03
 
 ### Fixed
