@@ -39,6 +39,10 @@ ENTROPY_RULE = Rule(
     context="any",
 )
 
+# A Subresource-Integrity hash / npm-lockfile integrity checksum, e.g.
+# "sha512-abc123.../==". These are PUBLIC content hashes, never a secret.
+_SRI_RE = re.compile(r"(?i)^sha(256|384|512)-[A-Za-z0-9+/=]+$")
+
 # a file path/asset reference: has a path separator and ends in a short
 # extension, e.g. "/components/cart_DASHBOARD_V10.html" or "./assets/logo.png".
 # These often mix case and digits like a real secret, but are not one.
@@ -101,6 +105,8 @@ def find_high_entropy(line: str, threshold: float = 4.0):
         value = match.group(2)
         if "://" in value:
             continue  # a URL, handled by other rules
+        if _SRI_RE.match(value):
+            continue  # a Subresource-Integrity / lockfile checksum, public by design
         if not _looks_like_token(value):
             continue
         if shannon_entropy(value) >= threshold:

@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
+### Fixed — precision on real projects (from a live audit of a real app)
+On a real project the scanner was drowning in noise (39 findings, ~1 real). Root
+causes fixed:
+
+- **Lock files are excluded by default** — `package-lock.json`, `yarn.lock`,
+  `pnpm-lock.yaml`, `Cargo.lock`, `poetry.lock`, `Gemfile.lock`, `go.sum`, and
+  friends. Their public integrity hashes were the single biggest noise source
+  (~77% of findings on the audited project).
+- **Subresource-Integrity / lockfile checksums are whitelisted** — a value like
+  `sha512-…` is a public content hash, never a secret, even outside a lock file
+  (import maps, `<script integrity>`).
+- **Firebase web `apiKey` is treated as public** — an `AIza…` key in a file with
+  `firebaseConfig` / `initializeApp` / `authDomain` is downgraded to medium and
+  labeled, because Firebase web keys are public identifiers by design (not the
+  same as a secret server key).
+- **Duplicate secret hits on one line are de-duplicated** — when a specific
+  vendor rule and the generic assignment rule match the same `apiKey:` line, only
+  the specific one is reported.
+- **`innerHTML` into a text-only element is not XSS** — assignment to a
+  `textarea` / `title` / `script` / `style` element (including a variable built
+  via `createElement('textarea')`) no longer flags, since that content parses as
+  text, not markup (the standard entity-decode idiom).
+- **The project's own ignore lists are honored** — `.gitignore` and
+  `.vercelignore` exclude files the project itself excludes/does not deploy.
+  Patterns that would hide `.env` are dropped, so the env-key analysis still runs.
+
 ## [0.2.2] - 2026-08-03
 
 ### Fixed — precision (validated on OWASP Juice Shop)

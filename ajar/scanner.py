@@ -9,7 +9,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 
 from .entropy import ENTROPY_RULE, find_high_entropy
-from .models import Finding, Rule
+from .models import Finding, Rule, Severity
 from .parsing import analyze
 from .project import find_project_findings
 from .rules import compile_rules
@@ -41,6 +41,15 @@ TEXT_EXTENSIONS = {
     ".html", ".htm", ".vue", ".svelte", ".astro", ".css", ".scss", ".sass", ".less",
 }
 TEXT_FILENAMES = {"Dockerfile", ".env", "Makefile"}
+
+# Dependency lock files: machine-generated, full of public integrity checksums
+# (sha512-… hashes) that trip entropy/secret rules. They are the single biggest
+# source of noise on a real project — never source, never a place bugs live.
+SKIP_FILENAMES = {
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "bun.lockb", "composer.lock", "Cargo.lock", "poetry.lock", "Pipfile.lock",
+    "pdm.lock", "Gemfile.lock", "go.sum", "flake.lock",
+}
 
 MAX_FILE_BYTES = 2_000_000  # skip anything larger than ~2 MB
 
@@ -80,6 +89,39 @@ def _is_excluded(path: Path, excludes: tuple[str, ...]) -> bool:
     return False
 
 
+# A gitignore pattern that would hide an .env file — dropped so the env-key
+# analysis still runs (projects routinely gitignore .env, but a security tool
+# still wants to inspect it).
+_ENV_IGNORE_RE = re.compile(r"(^|/)\.env(\.|\*|$)")
+
+
+def _load_ignore_patterns(root: Path) -> tuple[str, ...]:
+    """Honor the project's own ignore lists (.gitignore, .vercelignore) so ajar
+    does not report findings in files the project excludes/does not deploy.
+
+    Patterns that would hide .env files are dropped (we always want to scan those
+    for secrets and unused keys).
+    """
+    patterns: list[str] = []
+    for fn in (".gitignore", ".vercelignore"):
+        p = root / fn
+        if not p.is_file():
+            continue
+        try:
+            lines = p.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#") or line.startswith("!"):
+                continue  # blank, comment, or a negation (un-ignore) — skip
+            line = line.lstrip("/").rstrip("/")
+            if not line or _ENV_IGNORE_RE.search("/" + line):
+                continue
+            patterns.append(line)
+    return tuple(patterns)
+
+
 def _iter_files(root: Path, excludes: tuple[str, ...] = ()) -> Iterator[Path]:
     if root.is_file():
         if not _is_excluded(root, excludes):
@@ -89,6 +131,8 @@ def _iter_files(root: Path, excludes: tuple[str, ...] = ()) -> Iterator[Path]:
         if path.is_dir():
             continue
         if any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path.name in SKIP_FILENAMES:
             continue
         if excludes and _is_excluded(path, excludes):
             continue
@@ -146,6 +190,75 @@ def _ignored_rule_ids(line: str) -> set[str] | None:
     return {rid.strip() for rid in ids.split(",") if rid.strip()}
 
 
+# A Firebase web config: its apiKey (AIza…) is a PUBLIC identifier by design.
+_FIREBASE_CTX_RE = re.compile(r"firebaseConfig|initializeApp|authDomain")
+_INNERHTML_VAR_RE = re.compile(r"(\w+)\s*\.\s*(?:inner|outer)HTML\s*=")
+# innerHTML content that goes into these elements parses as text, not markup —
+# a <script> inside is inert. The textarea idiom is the standard entity-decoder.
+_SAFE_HTML_ELEMS = ("textarea", "title", "script", "style")
+
+
+def _refine_findings(
+    findings: list[Finding], file_texts: dict[Path, str]
+) -> list[Finding]:
+    """Post-process for precision: drop duplicate secret hits on one line, treat a
+    Firebase web apiKey as public, and clear innerHTML into a text-only element."""
+    text_by_path = {str(p): t for p, t in file_texts.items()}
+    line_cache: dict[str, list[str]] = {}
+
+    def line_at(path: str, lineno: int) -> str:
+        if path not in line_cache:
+            line_cache[path] = text_by_path.get(path, "").splitlines()
+        ls = line_cache[path]
+        return ls[lineno - 1] if 0 <= lineno - 1 < len(ls) else ""
+
+    # A generic secret and a specific vendor secret on the SAME line are the same
+    # finding — keep the specific one only.
+    drop: set[int] = set()
+    groups: dict[tuple[str, int], list[Finding]] = {}
+    for f in findings:
+        groups.setdefault((f.path, f.line), []).append(f)
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        if any(f.rule.category == "secrets" and "GENERIC" not in f.rule.id for f in group):
+            for f in group:
+                if "GENERIC" in f.rule.id:
+                    drop.add(id(f))
+
+    refined: list[Finding] = []
+    for f in findings:
+        if id(f) in drop:
+            continue
+        if f.rule.id == "XSS_INNERHTML":
+            m = _INNERHTML_VAR_RE.search(line_at(f.path, f.line))
+            var = m.group(1) if m else ""
+            text = text_by_path.get(f.path, "")
+            if var.lower() in _SAFE_HTML_ELEMS:
+                continue
+            # a variable built as one of the safe elements: createElement('textarea')
+            if var and re.search(
+                r"\b" + re.escape(var) + r"\b\s*=\s*[^;\n]*createElement\(\s*['\"]"
+                r"(?:" + "|".join(_SAFE_HTML_ELEMS) + r")['\"]",
+                text,
+            ):
+                continue
+        if f.rule.id == "SECRET_GOOGLE_API_KEY" and _FIREBASE_CTX_RE.search(
+            text_by_path.get(f.path, "")
+        ):
+            f = replace(
+                f,
+                rule=replace(
+                    f.rule,
+                    severity=Severity.MEDIUM,
+                    message=f.rule.message
+                    + " (Firebase web key: public by design — verify it is not a server-side key.)",
+                ),
+            )
+        refined.append(f)
+    return refined
+
+
 def scan_path(
     root: Path,
     rules: Iterable[Rule],
@@ -157,6 +270,9 @@ def scan_path(
     findings: list[Finding] = []
     # Collected for the cross-file, project-level pass (see ajar.project).
     file_texts: dict[Path, str] = {}
+    # Honor the project's own ignore lists so we don't report on excluded files.
+    if root.is_dir():
+        excludes = excludes + _load_ignore_patterns(root)
 
     for file_path in _iter_files(root, excludes):
         try:
@@ -174,6 +290,9 @@ def scan_path(
 
     # Project-level analysis needs the whole repo at once (config vs. real usage).
     findings.extend(find_project_findings(file_texts))
+
+    # Precision pass: dedup, Firebase-public downgrade, safe-element innerHTML.
+    findings = _refine_findings(findings, file_texts)
 
     findings.sort(key=lambda f: (-f.rule.severity.rank, f.path, f.line))
     return findings

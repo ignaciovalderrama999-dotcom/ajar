@@ -437,6 +437,60 @@ def test_test_files_suppress_heuristic_secrets_keep_vendor(tmp_path, rules):
     assert any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(src, rules))
 
 
+def test_lockfiles_excluded(tmp_path, rules):
+    (tmp_path / "package-lock.json").write_text(
+        '"integrity": "sha512-aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8oPqRsTuVwXyZ0123456789Ab",\n'
+    )
+    (tmp_path / "app.js").write_text("const x = 1;\n")
+    assert scan_path(tmp_path, rules) == []
+
+
+def test_sri_hash_not_flagged(tmp_path, rules):
+    f = tmp_path / "importmap.json"
+    f.write_text(
+        '{"integrity": "sha384-aG9x8Qz2Kp7Lm4Rt9Wv3Bn6Xy1Zc5Df8oPqRsTuVwXyZ0123456789Abc"}\n'
+    )
+    assert not any(x.rule.id == "SECRET_HIGH_ENTROPY" for x in scan_path(f, rules))
+
+
+def test_google_apikey_dedup_and_firebase_downgrade(tmp_path, rules):
+    # Both SECRET_GOOGLE_API_KEY and generic fire on one apiKey line -> dedup.
+    plain = tmp_path / "cfg.js"
+    plain.write_text('const c = { apiKey: "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx0" };\n')
+    ids = {x.rule.id for x in scan_path(plain, rules)}
+    assert "SECRET_GOOGLE_API_KEY" in ids
+    assert "SECRET_GENERIC_ASSIGNMENT" not in ids
+
+    # In a Firebase web config, the apiKey is public by design -> medium.
+    fb = tmp_path / "firebase.js"
+    fb.write_text(
+        'const firebaseConfig = { apiKey: "AIzaSyDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx0", '
+        'authDomain: "x.firebaseapp.com" };\ninitializeApp(firebaseConfig);\n'
+    )
+    g = [x for x in scan_path(fb, rules) if x.rule.id == "SECRET_GOOGLE_API_KEY"]
+    assert g and g[0].rule.severity is Severity.MEDIUM
+
+
+def test_innerhtml_into_textarea_is_not_xss(tmp_path, rules):
+    safe = tmp_path / "decode.js"
+    safe.write_text(
+        'const ta = document.createElement("textarea");\nta.innerHTML = encoded;\n'
+    )
+    assert not any(x.rule.id == "XSS_INNERHTML" for x in scan_path(safe, rules))
+
+
+def test_gitignore_honored_but_env_still_scanned(tmp_path, rules):
+    (tmp_path / ".gitignore").write_text("secret_test.html\n.env\n")
+    (tmp_path / "secret_test.html").write_text('const p = "AKIAIOSFODNN7EXAMPLE";\n')
+    (tmp_path / ".env").write_text("UNUSED_XYZ=1\n")
+    (tmp_path / "app.js").write_text("console.log(1);\n")
+    findings = scan_path(tmp_path, rules)
+    paths = {Path(x.path).name for x in findings}
+    ids = {x.rule.id for x in findings}
+    assert "secret_test.html" not in paths  # gitignored file skipped
+    assert "UNUSED_ENV_KEY" in ids  # .env still analyzed despite being gitignored
+
+
 def test_i18n_dir_excluded(tmp_path, rules):
     (tmp_path / "i18n").mkdir()
     (tmp_path / "i18n" / "en.json").write_text('{"msg": "AKIAIOSFODNN7EXAMPLE looking text"}\n')
